@@ -1,0 +1,502 @@
+/* CSS variables for easy theme customization */
+:root {
+    --primary-color: #dc3545;
+    --secondary-color: #6c757d;
+    --font-family: 'Roboto', sans-serif;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --text-color: #212529;
+    --body-color: #f8f9fa;
+    --badge-secondary: #6c757d;
+    --badge-primary: #0d6efd;
+    --favorite-active-color: #ffc107;
+    --favorite-inactive-color: #d51c1c;
+}
+
+/* .collapse:not(.show) {
+    display: block !important;
+} */
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--body-color) !important;
+    color: var(--text-color);
+}
+
+h1, h2, h3, h5 {
+    font-weight: 700;
+}
+
+.navbar {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    background-color: var(--primary-color);
+}
+
+.navbar-brand img {
+    height: 30px;
+}
+
+.navbar-brand span {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.navbar-container {
+    height: 54px;
+    justify-content: space-between;
+}
+
+.form-control {
+    width: 300px;
+}
+
+.rounded-circle {
+    border-radius: 50% !important;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+.thumbnail-img {
+    /* display: var(--thumbnail-display, block); */
+    border: 1px solid white; /* 移除边框 */
+    outline: none; /* 移除轮廓 */
+    box-shadow: none; /* 移除阴影 */
+    background-color: lightgray; /* 暂时设置背景颜色为浅灰色 */
+}
+
+.badge.text-muted {
+    font-size: 0.9rem;
+}
+
+.list-group-item {
+    padding: 0.5rem;
+    width: 370px;
+    background-color: transparent !important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.list-group-item img {
+    object-fit: cover;
+}
+
+h5.mt-2 {
+    margin-top: 0.5rem !important;
+}
+
+.text-start {
+    text-align: left !important;
+}
+
+/* Styles for the Favorites Button */
+.favorite-btn {
+    border-radius: 5px;
+    background: var(--favorite-inactive-color);
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #ffffff;
+    transition: background 0.3s, color 0.3s;
+}
+
+.favorite-btn .fas.fa-star {
+    color: inherit;
+}
+
+.offcanvas-body {
+    background-color: var(--body-color) !important;
+}
+
+.text-dark {
+    color: var(--text-color) !important;
+}
+
+/* Styles for offcanvas */
+.offcanvas {
+    width: 250px;
+}
+
+/* Styles for Audio player */
+.audio-player-container {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    z-index: 1050;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.audio-player {
+    width: 100%;
+    background-color: var(--primary-color);
+    color: #ffffff;
+    border-radius: 0;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* Track name */
+.audio-player #audio-title {
+    padding: 20px;
+    font-weight: bold;
+    text-align: left;
+    width: 100%;
+    font-size: 1.1rem;
+    color: var(--light-color);
+}
+
+/* Styling the active track */
+.audio-item.active {
+    background-color: var(--light-color);
+}
+
+/* Styling the audio list */
+.audio-list {
+    background-color: #ffffff;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.audio-item {
+    background-color: #ffffff;
+    padding: 10px 15px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    height: 50px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.audio-item .play-audio-btn {
+    flex-shrink: 0;
+    margin-right: 15px;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.audio-item .audio-title {
+    flex-grow: 1;
+    font-weight: bold;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-right: 15px;
+}
+
+.audio-item a {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: var(--secondary-color);
+}
+
+.audio-item a img {
+    width: 20px;
+    height: 20px;
+    object-fit: cover;
+    margin-right: 5px;
+}
+
+.audio-item a span {
+    font-size: 0.9rem;
+}
+.video-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.video-container h5 {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 85%;
+    width: auto;
+    height: 1.2em;
+}
+/* Padding for content so it doesn't overlap with Audio player */
+/* .content {
+    padding-bottom: 50px;
+} */
+
+/* Media Queries for Mobile Devices */
+@media (max-width: 768px) {
+    .search-control {
+        display: none !important;
+    }
+    .dropdown-menu.columns .col {
+        min-width: 150px;
+    }
+}
+@media (max-width: 480px) {
+    .dropdown-menu.columns .col {
+        min-width: 100%;
+    }
+}
+/* @media (max-width: 768px) {
+    .form-control {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .navbar-brand span {
+        font-size: 1.2rem;
+    }
+
+    .audio-player {
+        padding: 10px;
+    }
+
+    .audio-player #audio-title {
+        font-size: 0.9rem;
+    }
+
+    .audio-player audio {
+        height: 35px;
+    }
+
+    .favorite-btn {
+        font-size: 0.9rem;
+        padding: 5px 10px;
+    }
+
+    .audio-item {
+        flex-direction: column;
+        align-items: flex-start;
+        height: auto;
+    }
+
+    .audio-item .audio-title {
+        margin-right: 0;
+        margin-bottom: 5px;
+    }
+
+    .audio-item a {
+        margin-right: 0;
+    }
+} */
+
+/* Video player styles */
+.mejs__player {
+    width: 100%; /* Set a fixed width */
+    height: auto; /* The height is automatically adjusted */
+    display: block;
+    margin: 0 auto; /* Centering video horizontally */
+}
+
+/* Audio player styles */
+.mejs__container {
+    width: 100% !important; /* The player stretches to the full width of the container */
+    margin: 0; /* Removing outer margins */
+    padding: 10px; /* Adding internal padding */
+    box-sizing: border-box; /* Accounting for indents */
+    background-color: var(--primary-color); /* Player background color */
+    border: none;
+}
+
+/* Progress bar and other controls MediaElement.js */
+.mejs__time-rail .mejs__time-total {
+    background-color: transparent; /* Progress bar background */
+    /*height: 10px;*/
+    /*border-radius: 5px;*/
+    /*border: none;*/
+}
+
+.mejs__time-rail .mejs__time-current {
+    background-color: var(--light-color); /* Red color for current time */
+    height: 10px;
+    border-radius: 5px;
+    border: none;
+}
+
+/* Volume bar background color */
+.mejs__horizontal-volume-total {
+    background-color: var(--primary-color); /* Color of the entire volume bar */
+    border-radius: 5px; /* Rounded corners */
+}
+
+/* Color of the current volume level */
+.mejs__horizontal-volume-current {
+    background-color: var(--light-color); /* Current volume color (can be changed to any) */
+    border-radius: 5px; /* Rounded corners */
+    border: none;
+}
+
+.mejs__volume-button button {
+    background-color: transparent;
+    color: var(--light-color); /* Volume button color */
+}
+
+.mejs__playpause-button button {
+    background-color: transparent;
+    color: var(--light-color); /* Play/Pause Button Color */
+}
+
+.mejs__time-handle {
+    display: none; /* Hide the time slider */
+}
+
+.offcanvas-favorites {
+    background-color: var(--primary-color);
+    color: var(--light-color);
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+}
+
+.tube-pc {
+    display: grid;
+    gap: .6rem;
+    padding: 20px;
+    @media (min-width: 640px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  
+    @media (min-width: 768px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  
+    @media (min-width: 1024px) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  
+    @media (min-width: 1080px) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  
+    @media (min-width: 1536px) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    
+    @media (min-width: 1600px) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    
+    @media (min-width: 1920px) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    
+    @media (min-width: 2560px) {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  
+    @media (min-width: 3000px) {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }  
+}
+
+.tube-mobile {
+    display: grid;
+    gap: .6rem;
+    padding: 20px;
+
+    @media (min-width: 640px) {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    @media (min-width: 768px) {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1024px) {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1080px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1536px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1600px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+
+.star-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    padding: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.star-btn:hover {
+    transform: scale(1.2);
+}
+
+.star-btn.negative i {
+    color: #dc3545;
+    /* 红色 */
+}
+
+.star-btn.neutral i {
+    color: #ffc107;
+    /* 黄色 */
+}
+
+.star-btn.positive i {
+    color: #28a745;
+    /* 绿色 */
+}
+
+.star-btn i.highlight {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+.star-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.video-controls-container {
+    width: 100%;
+    max-width: 192px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-gap: 1px;
+    padding: 1px;
+    box-sizing: border-box;
+}
+
+.control-button {
+    aspect-ratio: 1;
+    width: 100%;
+    height: auto;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+@media (max-width: 768px) {
+    .video-controls-container {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 576px) {
+    .video-controls-container {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}

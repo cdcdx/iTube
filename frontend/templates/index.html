@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Displaying results -->
+{% if results.videos %}
+
+    <!-- Video results -->
+    {% if mobile %}
+    <div class="tube-mobile" id="listshow">
+    {% else %}
+    <div class="tube-pc" id="listshow">
+    {% endif %}
+        {% for item in results.videos %}
+        <div>
+            <div class="image-container">
+                <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank">
+                    <img src="{{ '/frontend/static/images/video.png' if not isShow else item.thumbnail_url }}" data-src="{{ item.thumbnail_url }}" alt="{{ item.file }}" title="{{ item.path +'/'+ item.code + ': ' if item.code else '' }}{{ item.size }} MB {{item.resolution}}" class="thumbnail-img" style="width: 100%; aspect-ratio: 16/9; object-fit: contain; border-radius: 4px;">
+                </a>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <h5 class="text-start mb-0">{{ item.id }}
+                    <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank" class="text-dark text-decoration-none">
+                        {{ item.file | replace('.mp4', '') | replace('.mkv', '') }}
+                    </a>
+                </h5>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <div style="height: 44px; justify-content: space-between;">
+        <div style="height: 100%; background-color: var(--body-color); padding: 0 10px 0 10px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; justify-content: space-between;"></div>
+            <div style="margin: auto;">
+                <a href="#" class="btn btn-danger ms-auto" id="btnone"><i class="fas fa-angle-double-left"></i></a>
+                <a href="#" class="btn btn-danger ms-auto" id="btntwo"><i class="fas fa-angle-left"></i></a>
+                <a href="#" class="btn btn-danger ms-auto" id="btnthree"></a>
+                <a href="#" class="btn btn-danger ms-auto" id="btnfour"><i class="fas fa-angle-right"></i></a>
+                <a href="#" class="btn btn-danger ms-auto" id="btnfive"><i class="fas fa-angle-double-right"></i></a>
+            </div>
+            <div style="width: auto;"></div>
+        </div>
+    </div>
+    
+    <!-- Resize JavaScript -->
+    <script>
+        // Reset list width and height
+        function resetSize() {
+            const listShow = document.getElementById('listshow');
+            listShow.style.width = (window.innerWidth - 5) + "px";
+        }
+
+        // Parse URL parameters
+        function getQueryParams() {
+            const queryParams = {};
+            const queryString = window.location.search.slice(1);
+            const pairs = queryString.split("&");
+            pairs.forEach(pair => {
+                const [key, value] = pair.split("=");
+                queryParams[decodeURIComponent(key)] = decodeURIComponent(value);
+            });
+            return queryParams;
+        }
+
+        // Set button links
+        function setButtonLinks(query, currentPage, totalPages) {
+            query=query.replace('+', ' ');
+            query=encodeURIComponent(query);
+            query=query.replace(/\%2B/g, '%20');
+            // console.log(query);
+            const buttons = {
+                btnone: { page: currentPage - 2, visible: currentPage > 2 },
+                btntwo: { page: currentPage - 1, visible: currentPage > 1 },
+                btnthree: { page: currentPage, visible: true },
+                btnfour: { page: currentPage + 1, visible: currentPage < totalPages },
+                btnfive: { page: currentPage + 2, visible: currentPage < totalPages - 1 }
+            };
+
+            for (const [id, button] of Object.entries(buttons)) {
+                const btn = document.getElementById(id);
+                if (button.visible) {
+                    btn.href = `/?page=${button.page}&query=${query}`;
+                    btn.hidden = false;
+                } else {
+                    btn.hidden = true;
+                }
+            }
+            document.getElementById('btnthree').textContent = `${currentPage}/${totalPages}`;
+        }
+
+        // Reset list width and height
+        resetSize();
+        // Listen to window resize event
+        window.addEventListener('resize', resetSize);
+
+        // Get parameters
+        const params = getQueryParams();
+        const query = params.query || '';
+        const currentPage = parseInt(params.page || '1', 10);
+        const count = {{ results.count|tojson }};
+        const limit = {{ results.limit|tojson }};
+        const totalPages = Math.ceil(count / limit);
+        // Set button links
+        setButtonLinks(query, currentPage, totalPages);
+
+        // Listen to keyboard events
+        document.addEventListener('keydown', function (event) {
+            const btnTwo = document.getElementById('btntwo');
+            const btnFour = document.getElementById('btnfour');
+            switch (event.key) {
+                case 'ArrowRight': // Next page
+                    if (btnFour && !btnFour.hidden) {
+                        btnFour.click();
+                    }
+                    break;
+                case 'ArrowLeft': // Previous page
+                    if (btnTwo && !btnTwo.hidden) {
+                        btnTwo.click();
+                    }
+                    break;
+                case 'ArrowUp': // Do nothing
+                case 'ArrowDown': // Do nothing
+                    break;
+            }
+        });
+    </script>
+
+{% else %}
+
+    <p class="text-color text-center">Nothing found matching your request.</p>
+
+{% endif %}
+
+{% endblock %}

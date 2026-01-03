@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% if title and title|length > 0 %}{{ title }}{% else %}{{ apptitle }}{% endif %}</title>
+    <!-- 本地 CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css?v=5.3.3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/all.min.css?v=5.15.1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <script>
+        async function makeRequest(url, method = 'GET') {
+            try {
+                const response = await fetch(url, { method });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            } catch (error) {
+                console.error('Error:', error.message);
+                throw error;
+            }
+        }
+
+        function onClearDB() {
+            const actionpwd = prompt("请输入密码", "");
+            if (actionpwd) {
+                const baseBytes = new TextEncoder().encode(actionpwd);
+                const baseactionpwd = Base58.encode(baseBytes);
+                const url = `/api/cleardb?pwd=${encodeURIComponent(baseactionpwd)}`;
+                makeRequest(url).then(responsecontent => {
+                    if (responsecontent.code === 200) {
+                        populateModal(responsecontent.data);
+                        location.reload();  // F5刷新
+                    } else {
+                        populateModal(responsecontent.msg);
+                    }
+                });
+            }
+        }
+        function onScanDisk(path) {
+            const url = path ? `/api/scan?path=${encodeURIComponent(path)}` : "/api/scan";
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    populateModal(responsecontent.data);
+                } else {
+                    populateModal(responsecontent.msg);
+                }
+            });
+        }
+        function onSyncThumbnail(path) {
+            const url = path ? `/api/syncthumbnail?path=${encodeURIComponent(path)}` : "/api/syncthumbnail";
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    populateModal(responsecontent.data);
+                } else {
+                    populateModal(responsecontent.msg);
+                }
+            });
+        }
+
+        function onShowThumbnail() {
+            const isShow = !getLocalStorage('isShow', false);
+            updateLocalStorage('isShow', isShow);
+            setShowThumbnail();
+        }
+        function onBlackMode() {
+            const isBlack = !getLocalStorage('isBlack', false);
+            updateLocalStorage('isBlack', isBlack);
+            setBlackMode();
+        }
+        function setShowThumbnail() {
+            const isShow = getLocalStorage('isShow', false);
+            const defaultImageUrl = '/frontend/static/images/video.png';
+            const images = document.querySelectorAll('.thumbnail-img');
+            images.forEach(img => {
+                if (!img.hasAttribute('data-src')) {
+                    img.setAttribute('data-src', img.src);
+                }
+                img.src = isShow ? img.getAttribute('data-src') : defaultImageUrl;
+            });
+        }
+        function setBlackMode() {
+            const isBlack = getLocalStorage('isBlack', false);
+            document.documentElement.style.setProperty('--body-color', isBlack ? 'black' : '#f8f9fa');
+            document.documentElement.style.setProperty('--bs-btn-bg', isBlack ? 'black' : '#dc3545');
+            document.documentElement.style.setProperty('--bs-btn-border-color', isBlack ? 'black' : '#dc3545');
+            document.documentElement.style.setProperty('--primary-color', isBlack ? 'black' : '#dc3545');
+            document.documentElement.style.setProperty('--text-color', isBlack ? 'var(--light-color)' : 'black');
+        }
+        function createDropdownItem(parent, text, config) {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.href = config.href || '#';
+            a.textContent = text;
+            a.onclick = config.onClick || (() => {});
+            // 如果有额外的属性需要设置
+            if (config.attributes) {
+                for (const [key, value] of Object.entries(config.attributes)) {
+                    a.setAttribute(key, value);
+                }
+            }
+            li.appendChild(a);
+            parent.appendChild(li);
+        }
+        function populateScanPathsDropdown() {
+            const pathsData = document.getElementById('scan-paths-data').textContent;
+            const b58paths = JSON.parse(pathsData);
+            const paths = b58paths.map(b58path => {
+                const pathBytes = Base58.decode(b58path);
+                return { text: new TextDecoder().decode(pathBytes), value: b58path };
+            });
+            const dropdown = document.getElementById('btnscanOne');
+            dropdown.innerHTML = '';
+            createDropdownItem(dropdown, 'ALL', { onClick: () => onScanDisk() });
+            paths.forEach(path => {
+                createDropdownItem(dropdown, path.text, { onClick: () => onScanDisk(path.value) });
+            });
+        }
+        function populateSyncPathsDropdown() {
+            const pathsData = document.getElementById('sync-paths-data').textContent;
+            
+            const b58paths = JSON.parse(pathsData);
+            const paths = b58paths.map(b58path => {
+                const pathBytes = Base58.decode(b58path);
+                return { text: new TextDecoder().decode(pathBytes), value: b58path };
+            });
+            const dropdown = document.getElementById('btnsyncOne');
+            dropdown.innerHTML = '';
+            createDropdownItem(dropdown, 'ALL', { onClick: () => onSyncThumbnail() });
+            paths.forEach(path => {
+                createDropdownItem(dropdown, path.text, { onClick: () => onSyncThumbnail(path.value) });
+            });
+        }
+        function populateKeysDropdown() {
+            const keysData = document.getElementById('keys-data').textContent;
+            const skeys = JSON.parse(keysData);
+            const numColumns = Math.max(1, Math.ceil(skeys.length / 30));
+            const columns = Array.from({ length: numColumns }, () => document.createElement('div'));
+            columns.forEach(column => column.className = 'col');
+
+            // 计算列数，每列最多30个
+            skeys.forEach((key, index) => {
+                const column = columns[index % numColumns];
+                createDropdownItem(column, key, {
+                    href: `{{ url_for("read_root") }}?page=1&query=${encodeURIComponent(key)}`,
+                    onClick: function () {
+                        window.location.href = this.href;
+                        return false;
+                    }
+                });
+            });
+
+            // 创建行并添加多列
+            const row = document.createElement('div');
+            row.className = 'row';
+            columns.forEach(column => row.appendChild(column));
+
+            const dropdown = document.getElementById('btnkeyOne');
+            dropdown.innerHTML = '';
+            dropdown.appendChild(row);
+        }
+        function populateModal(message) {
+            const modalMessage = document.getElementById('customAlertMessage');
+            const modal = new bootstrap.Modal(document.getElementById('customAlertModal'));
+            modalMessage.innerText = message;
+            modal.show();
+
+            let countdown = 5;
+            const countdownElement = document.getElementById('customAlertButton');
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                countdownElement.innerText = `${countdown}`;
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    modal.hide();
+                    countdownElement.innerText = 5;
+                }
+            }, 1000);
+        }
+        function updateLocalStorage(key, value) {
+            localStorage.setItem(key, value);
+        }
+        function getLocalStorage(key, defaultValue) {
+            return JSON.parse(localStorage.getItem(key)) || defaultValue;
+        }
+
+        window.onload = function () {
+            setShowThumbnail();
+            setBlackMode();
+            populateScanPathsDropdown();
+            populateSyncPathsDropdown();
+            populateKeysDropdown();
+        };
+    </script>
+</head>
+<body>
+    <div style="height: 100vh;display: flex;flex-direction: column;">
+        <!-- Navigation Bar -->
+        <nav id="navbar">
+            <div class="navbar-container">
+                <div id="navbarSupportedContent" style="height: 100%;background-color: var(--primary-color);padding: 0 10px 0 10px;display: flex;align-items: center;justify-content: space-between;">
+                    <div style="display: flex;justify-content: space-between;">
+                        <button class="btn btn-danger ms-auto" type="button" style="margin-right: 10px;" data-bs-toggle="offcanvas" data-bs-target="#favoritesOffcanvas" aria-controls="favoritesOffcanvas">
+                            <i class="fas fa-star"></i>
+                        </button>
+                        <a class="navbar-brand d-flex align-items-center" href="{{ url_for('read_root') }}">
+                            <span class="ms-2 text-white">{{ apptitle }}</span>
+                        </a>
+                    </div>
+                    <div style="margin: auto;" class="search-control">
+                        <form method="get" role="search" action="/" style="width: auto; display: flex;">
+                            <input type="text" name="query" class="form-control me-2" placeholder="" value="{{ query or '' }}">
+                            <button class="btn btn-danger ms-auto" type="submit" style="margin-right: 6px;">Search</button>
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnkeyMenu" data-bs-toggle="dropdown" title="关键字" aria-expanded="false">
+                                <div id="keys-data" style="display:none;">{{ keys | tojson }}</div>
+                                <i class="fas fa-search"></i>
+                                <ul class="dropdown-menu columns" aria-labelledby="btnkeyMenu" id="btnkeyOne">
+                                    <!-- keys will be added using JavaScript -->
+                                </ul>
+                            </button>
+                        </form>
+                    </div>
+                    <div style="width: auto;display: flex;">
+                        <div>
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnscanMenu" data-bs-toggle="dropdown" title="扫描路径" aria-expanded="false">
+                                <div id="scan-paths-data" style="display:none;">{{ paths | tojson }}</div>
+                                <i class="fas fa-list" size="24px"></i>
+                                <ul class="dropdown-menu" aria-labelledby="btnscanMenu" id="btnscanOne">
+                                    <!-- Scan paths will be added using JavaScript -->
+                                </ul>
+                            </button>
+                        </div>
+                        <div style="margin: 0 3px;">
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnsyncMenu" data-bs-toggle="dropdown" title="同步图片" aria-expanded="false">
+                                <div id="sync-paths-data" style="display:none;">{{ paths | tojson }}</div>
+                                <i class="fas fa-images" size="24px"></i>
+                                <ul class="dropdown-menu" aria-labelledby="btnsyncMenu" id="btnsyncOne">
+                                    <!-- Scan paths will be added using JavaScript -->
+                                </ul>
+                            </button>
+                        </div>
+                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onShowThumbnail()" title="显示图片" id="btnshow">
+                            <i class="fas fa-image"></i>
+                        </button>
+                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onClearDB()" title="清空数据库" id="btnclear">
+                            <i class="fas fa-database"></i>
+                        </button>
+                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onBlackMode()"title="黑暗模式" >
+                            <i class="fas fa-sun"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Offcanvas Favorites -->
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="favoritesOffcanvas" aria-labelledby="favoritesOffcanvasLabel">
+            <div class="offcanvas-header offcanvas-favorites">
+                <h5 class="offcanvas-title" id="favoritesOffcanvasLabel">
+                    <i class="fas fa-star"></i> Favorites
+                </h5>
+                <button class="btn btn-danger ms-auto" type="button" data-bs-dismiss="offcanvas" aria-label="Cancel">
+                    <i class="fa fa-times-circle" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="offcanvas-body offcanvas-favorites">
+                <ul class="list-group list-group-flush" id="favoritesList">
+                    <!-- Featured videos will be added using JavaScript -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- main -->
+        <div style="width:100%;flex: 1 1 0%;display: flex;flex-direction: column">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="customAlertModal" aria-labelledby="customAlertModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content" style="background-color: var(--body-color);">
+                <div class="modal-header" style="background-color: var(--primary-color);">
+                    <h5 class="ms-2 text-white" id="customAlertModalLabel">Tips</h5>
+                </div>
+                <div class="modal-body" style="width:100%;flex: 1 1 0%;" id="customAlertMessage">
+                    <!-- The message content will be displayed here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal" id="customAlertButton">5</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 本地 JS -->
+    <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/audio_player.js') }}"></script>
+    <script src="{{ url_for('static', path='js/favorites.js') }}"></script>
+    <script src="{{ url_for('static', path='js/base58.js') }}"></script>
+</body>
+</html>
