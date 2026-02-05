@@ -1,4 +1,3 @@
-# routes/frontend.py
 import os
 import base58
 import ffmpeg
@@ -7,7 +6,7 @@ from utils.log import log as logger
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 
-from utils.db import get_db
+from utils.db import get_db, format_query_for_db, convert_row_to_dict, format_datetime_fields
 from utils.security import get_current_username
 from utils.local import is_mobile, generate_thumbnails
 from config import APP_TITLE, APP_PAGE_LIMIT, SCAN_CODE, SCAN_PATH, DB_ENGINE, templates, TEMP_PATH
@@ -51,9 +50,9 @@ async def read_root(request: Request, query: str = None, page: int | None = 0, u
             scan_paths.append(localpath)
         logger.debug(f"scan_paths: {scan_paths}")
         # 搜索记录
-        check_query = "SELECT `key` FROM dav_search WHERE id>0 and status=0 order by `type`,`key` asc" # limit 20"
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query}")
+        check_query = "SELECT `key` FROM dav_search WHERE parid!=0 and status=0 order by `parid`,`key` asc" # limit 20"
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query}")
         await cursor.execute(check_query)
         keys_tuple = await cursor.fetchall()
         # logger.debug(f"keys_tuple: {keys_tuple}")
@@ -62,39 +61,64 @@ async def read_root(request: Request, query: str = None, page: int | None = 0, u
         for key in keys_tuple:
             search_keys.append(key[0])
         # logger.debug(f"search_keys: {search_keys}")
+        search_keys = list(dict.fromkeys(search_keys)) # 保持原有顺序的去重
+        logger.debug(f"search_keys: {search_keys}")
 
         ## 搜索数量
         if query in ['all','all2','all3']:
-            check_query = "SELECT count(*) as len FROM dav_local WHERE status=0 and id>0"
+            check_query = """SELECT count(*) as len 
+                            FROM dav_local 
+                            WHERE status=0 and id>0;
+                            """
             values = ()
         elif query == 'repeat':
-            if SCAN_CODE:
-                check_query = "SELECT count(*) as len FROM dav_local, (SELECT * FROM (SELECT code,count(*) as count FROM dav_local WHERE status=0 GROUP BY code ORDER BY count DESC)as aaa WHERE aaa.count > 1) as bbb WHERE bbb.code = dav_local.code and dav_local.status=0"
-            else:
-                check_query = "SELECT count(*) as len FROM dav_local, (SELECT * FROM (SELECT file,count(*) as count FROM dav_local WHERE status=0 GROUP BY file ORDER BY count DESC)as aaa WHERE aaa.count > 1) as bbb WHERE bbb.file = dav_local.file and dav_local.status=0"
+            field = "code" if SCAN_CODE else "file"
+            check_query = f"""SELECT count(*) as len
+                            FROM dav_local dl
+                            INNER JOIN (
+                                SELECT {field}
+                                FROM dav_local 
+                                WHERE status = 0 
+                                GROUP BY {field} 
+                                HAVING COUNT(*) > 1
+                            ) dup ON dl.{field} = dup.{field}
+                            WHERE dl.status = 0;
+                        """
             values = ()
         elif query == 'nojapan':
-            check_query = "SELECT count(*) as len FROM dav_local WHERE status=0 and file NOT GLOB '*[あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン]*'"
+            check_query = """SELECT count(*) as len 
+                            FROM dav_local 
+                            WHERE status=0 AND file NOT GLOB '*[あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン]*';
+                            """
             values = ()
-        elif query:
+        elif query == 'score':
+            check_query = """SELECT count(dl.file) as len
+                            FROM dav_web dw
+                            INNER JOIN dav_local dl ON dw.code = dl.code
+                            WHERE dl.status=0 AND dw.score > 0;
+                            """
+            values = ()
+        elif query: # search
             if '*' in query:
                 query_parts = query.split('*')
             else:
                 query_parts = query.split()
             # logger.info(f"query_parts: {query_parts} len: {len(query_parts)}")
             conditions = " AND ".join([f"INSTR(UPPER(file), UPPER(%s))>0" for _ in query_parts])
-            check_query = f"SELECT count(*) as len FROM dav_local WHERE status=0 and {conditions}"
+            check_query = f"""SELECT count(*) as len 
+                            FROM dav_local 
+                            WHERE status=0 and {conditions}
+                            """
             values = tuple(query_parts)
         else:
             check_query = "SELECT count(*) as len FROM dav_local WHERE status=0 and id=0"
             values = ()
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         len_files = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(len_files, tuple):
-            len_files = dict(zip([desc[0] for desc in cursor.description], len_files))
+        # logger.debug(f"len_files: {len_files}")
+        len_files = convert_row_to_dict(len_files, cursor.description)  # 转换字典
         logger.debug(f"len_files: {len_files}")
 
         count = len_files['len']
@@ -112,11 +136,11 @@ async def read_root(request: Request, query: str = None, page: int | None = 0, u
             })
 
         ## 第一次搜索入库 若含有'-'/'_'/' '/纯数字/则不入库
-        if page == 0 and (query.find('-') < 0 and query.find('_') < 0 and query.find(' ') < 0 and query.isdigit() == False and query not in ['all','all2','all3','repeat','trans','transcode',''] ):
+        if page == 0 and (query.find('-') < 0 and query.find('_') < 0 and query.find(' ') < 0 and query.isdigit() == False and query not in ['all','all2','all3','repeat','nojapan','score','trans','transcode',''] ):
             # 关键字是否存在: 不存在则入库, 存在则将更新次数
-            check_query = "SELECT id FROM dav_search WHERE `key`=%s and status=0 and id>0"
+            check_query = "SELECT id FROM dav_search WHERE `key`=%s and parid!=0 and status=0"
             values = (query,)
-            if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+            check_query = format_query_for_db(check_query)
             logger.debug(f"check_query: {check_query} values: {values}")
             await cursor.execute(check_query, values)
             recoed_keys = await cursor.fetchone()
@@ -125,15 +149,15 @@ async def read_root(request: Request, query: str = None, page: int | None = 0, u
                 # 更新搜索次数
                 update_query = "UPDATE dav_search SET count=(count+1) WHERE `key`=%s"
                 values = (query,)
-                if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?')
-                # logger.debug(f"update_query: {update_query} values: {values}")
+                update_query = format_query_for_db(update_query)
+                logger.debug(f"update_query: {update_query} values: {values}")
                 await cursor.execute(update_query, values)
             else:
                 # 插入搜索记录
                 insert_query = "INSERT INTO dav_search (`key`, `type`, count) VALUES (%s, %s, %s)"
                 values = (query, 1, 1,)
-                if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
-                # logger.debug(f"insert_query: {insert_query} values: {values}")
+                insert_query = format_query_for_db(insert_query)
+                logger.debug(f"insert_query: {insert_query} values: {values}")
                 await cursor.execute(insert_query, values)
             if DB_ENGINE == "sqlite": cursor.connection.commit()
             else: await cursor.connection.commit()
@@ -145,48 +169,120 @@ async def read_root(request: Request, query: str = None, page: int | None = 0, u
         else:
             alimit = limit
         if query == 'all':
-            check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE status=0 and id>0 ORDER BY code ASC LIMIT %s,%s"
+            if SCAN_CODE:
+                check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 and dl.id>0 
+                            ORDER BY dl.code ASC 
+                            LIMIT %s,%s;
+                            """
+            else:
+                check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 and dl.id>0 
+                            ORDER BY dl.file ASC 
+                            LIMIT %s,%s;
+                            """
             values = (limit * (page - 1), alimit,)
         elif query == 'all2':
-            check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE status=0 and id>0 ORDER BY created ASC LIMIT %s,%s"
+            check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 and dl.id>0 
+                            ORDER BY dl.created ASC 
+                            LIMIT %s,%s;
+                            """
             values = (limit * (page - 1), alimit,)
         elif query == 'all3':
-            check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE status=0 and id>0 ORDER BY id ASC LIMIT %s,%s"
+            check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 and dl.id>0 
+                            ORDER BY dl.id ASC 
+                            LIMIT %s,%s;
+                            """
             values = (limit * (page - 1), alimit,)
         elif query == 'repeat':
-            if SCAN_CODE:
-                check_query = "SELECT dav_local.id,dav_local.code,dav_local.path,dav_local.file,dav_local.size,dav_local.duration,dav_local.aspectratio,dav_local.resolution,dav_local.created FROM dav_local, (SELECT * FROM (SELECT code,count(*) as count FROM dav_local WHERE status=0 GROUP BY code ORDER BY count DESC)as aaa WHERE aaa.count > 1) as bbb WHERE bbb.code = dav_local.code and dav_local.status=0 ORDER BY dav_local.code,dav_local.file ASC LIMIT %s,%s"
-            else:
-                check_query = "SELECT dav_local.id,dav_local.code,dav_local.path,dav_local.file,dav_local.size,dav_local.duration,dav_local.aspectratio,dav_local.resolution,dav_local.created FROM dav_local, (SELECT * FROM (SELECT file,count(*) as count FROM dav_local WHERE status=0 GROUP BY file ORDER BY count DESC)as aaa WHERE aaa.count > 1) as bbb WHERE bbb.file = dav_local.file and dav_local.status=0 ORDER BY dav_local.file ASC LIMIT %s,%s"
+            field = "code" if SCAN_CODE else "file"
+            check_query = f"""SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            INNER JOIN (
+                                SELECT {field}
+                                FROM dav_local 
+                                WHERE status = 0 
+                                GROUP BY {field} 
+                                HAVING COUNT(*) > 1
+                            ) dup ON dl.{field} = dup.{field}
+                            WHERE dl.status = 0
+                            ORDER BY dl.{field} ASC, dl.file ASC 
+                            LIMIT %s,%s;
+                        """
             values = (limit * (page - 1), alimit,)
         elif query == 'nojapan':
-            check_query = "SELECT dav_local.id,dav_local.code,dav_local.path,dav_local.file,dav_local.size,dav_local.duration,dav_local.aspectratio,dav_local.resolution,dav_local.created FROM dav_local WHERE status=0 and file NOT GLOB '*[あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン]*' ORDER BY dav_local.file ASC LIMIT %s,%s"
+            check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 AND dl.file NOT GLOB '*[あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン]*'
+                            ORDER BY dl.file ASC 
+                            LIMIT %s,%s;
+                            """
             values = (limit * (page - 1), alimit,)
-        elif query:
+        elif query == 'score':
+            check_query = """SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_web dw
+                            INNER JOIN dav_local dl ON dw.code = dl.code
+                            WHERE dl.status=0 AND dw.score > 0
+                            ORDER BY dl.file ASC
+                            LIMIT %s,%s;
+                            """
+            values = (limit * (page - 1), alimit,)
+        elif query: # search
             if '*' in query:
                 query_parts = query.split('*')
             else:
                 query_parts = query.split()
             # logger.info(f"query_parts: {query_parts} len: {len(query_parts)}")
-            conditions = " AND ".join([f"INSTR(UPPER(file), UPPER(%s))>0" for _ in query_parts])
-            check_query = f"SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE status=0 and {conditions} ORDER BY code ASC LIMIT %s,%s"
+            conditions = " AND ".join([f"INSTR(UPPER(dl.file), UPPER(%s))>0" for _ in query_parts])
+            check_query = f"""SELECT dl.id,dl.code,dl.path,dl.file,dl.size,dl.duration,dl.aspectratio,dl.resolution,dl.created, COALESCE(dw.score, 0) as score
+                            FROM dav_local dl
+                            LEFT JOIN dav_web dw ON dl.code = dw.code
+                            WHERE dl.status=0 and {conditions} 
+                            ORDER BY dl.code ASC 
+                            LIMIT %s,%s;
+                            """
             values = tuple(query_parts) + (limit * (page - 1), alimit,)
-        else:
-            check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE status=0 and id=0 ORDER BY code ASC"
+        else: # 0
+            check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created,0 as score FROM dav_local WHERE status=0 and id=0 ORDER BY code ASC"
             values = ()
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_files = await cursor.fetchall()
-        # 如果是元组，转换为字典
-        if local_files and isinstance(local_files[0], tuple):
-            columns = [desc[0] for desc in cursor.description]
-            local_files = [dict(zip(columns, row)) for row in local_files]
         # logger.debug(f"local_files: {local_files}")
+        if isinstance(local_files, (list, tuple)) and len(local_files) > 0: # 转换字典列表
+            converted_list = []
+            for row in local_files: # 将每一行转换为字典
+                row_dict = convert_row_to_dict(row, cursor.description)  # 转换字典
+                formatted_row = format_datetime_fields(row_dict)  # DATETIME转字符串
+                converted_list.append(formatted_row)
+            local_files = converted_list
+        logger.debug(f"local_files: {local_files[0] if len(local_files)>0 else ''}")
 
         for local_file in local_files:
             if local_file['aspectratio'] == 0 or local_file['aspectratio'] is None:
                 local_file['aspectratio']=0.5625
+            # 计算全路径
+            path = os.path.join(local_file['path'], local_file['file'])
+            # logger.debug(f"path: {path}")
+            # base58 加密
+            path_bytes = base58.b58encode(path.encode('UTF-8'))
+            # logger.debug(f"path_bytes: {path_bytes}")
+            path_base = bytes.decode(path_bytes)
+            # logger.debug(f"path_base: {path_base}")
+            local_file['base'] = path_base
 
         # 批量获取缩略图
         results = {'videos': [], 'count': 0}
@@ -232,8 +328,8 @@ async def play_video(request: Request, id_name: str, cursor=Depends(get_db)):
             scan_paths.append(localpath)
         logger.debug(f"scan_paths: {scan_paths}")
         # 搜索记录
-        check_query = "SELECT `key` FROM dav_search WHERE id>0 and status=0 order by `type`,`key` asc" # limit 20"
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+        check_query = "SELECT `key` FROM dav_search WHERE parid!=0 and status=0 order by `parid`,`key` asc" # limit 20"
+        check_query = format_query_for_db(check_query)
         logger.debug(f"check_query: {check_query}")
         await cursor.execute(check_query)
         keys_tuple = await cursor.fetchall()
@@ -243,16 +339,17 @@ async def play_video(request: Request, id_name: str, cursor=Depends(get_db)):
         for key in keys_tuple:
             search_keys.append(key[0])
         # logger.debug(f"search_keys: {search_keys}")
+        search_keys = list(dict.fromkeys(search_keys)) # 保持原有顺序的去重
+        logger.debug(f"search_keys: {search_keys}")
 
         ## 数量
         check_query = "SELECT count(*) as len FROM dav_local WHERE status=0 and id>0"
         values = ()
         await cursor.execute(check_query, values)
         len_files = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(len_files, tuple):
-            len_files = dict(zip([desc[0] for desc in cursor.description], len_files))
         # logger.debug(f"len_files: {len_files}")
+        len_files = convert_row_to_dict(len_files, cursor.description)  # 转换字典
+        logger.debug(f"len_files: {len_files}")
         count = len_files['len']
         logger.info(f"count: {count}")
         if count == 0:
@@ -262,17 +359,16 @@ async def play_video(request: Request, id_name: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,format,created FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:
             logger.warning(f"Database not found: {id_name}")
             return HTMLResponse("Database not found", status_code=404)
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         path = os.path.join(local_file['path'], local_file['file'])
         # logger.debug(f"path: {path}")
@@ -300,8 +396,8 @@ async def play_video(request: Request, id_name: str, cursor=Depends(get_db)):
             # 更新数据库格式字段
             update_query = "UPDATE dav_local SET format=%s WHERE id=%s"
             values = (video_format_name, id_name,)
-            if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?')
-            # logger.debug(f"update_query: {update_query} values: {values}")
+            update_query = format_query_for_db(update_query)
+            logger.debug(f"update_query: {update_query} values: {values}")
             await cursor.execute(update_query, values)
             if DB_ENGINE == "sqlite": cursor.connection.commit()
             else: await cursor.connection.commit()
@@ -320,14 +416,14 @@ async def play_video(request: Request, id_name: str, cursor=Depends(get_db)):
         # 关键字是否存在: 不存在则入库, 存在则将更新次数
         check_query = "SELECT score FROM dav_web WHERE `code`=%s and status=0"
         values = (local_file['code'],)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+        check_query = format_query_for_db(check_query)
         logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         score_keys = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(score_keys, tuple):
-            score_keys = dict(zip([desc[0] for desc in cursor.description], score_keys))
+        # logger.debug(f"score_keys: {score_keys}")
+        score_keys = convert_row_to_dict(score_keys, cursor.description)  # 转换字典
         logger.debug(f"score_keys: {score_keys}")
+        
         local_file['score'] = score_keys['score'] if score_keys else 0
         
         results = dict(videos=[])

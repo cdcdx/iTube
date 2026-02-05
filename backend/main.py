@@ -8,12 +8,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from api.router import root_router
 from api.router import api_router
-
+from api.router import root_router
 from utils.db import database
 from utils.log import loggers, log as logger
-from utils.local import *
+from utils.local import check_ssl_files
 from config import *
 
 

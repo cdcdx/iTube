@@ -2,10 +2,10 @@ import asyncio
 import json
 from builtins import anext
 from contextlib import asynccontextmanager
+from loguru import logger
 
 from utils.redis.init import get_redis
 from utils.redis.serialization_tools import is_json, get_dict_target_value
-from utils.log import log as logger
 
 
 @asynccontextmanager

@@ -15,7 +15,7 @@ from pathlib import Path
 from utils.local import sync_file_cut, sync_file_transcode, check_ffmpeg_processes
 from utils.local import get_file_size, get_file_createtime
 from utils.log import log as logger
-from utils.db import get_db_app
+from utils.db import get_db_app, format_query_for_db, convert_row_to_dict, format_datetime_fields
 from config import DB_ENGINE
 
 ## app
@@ -23,6 +23,7 @@ from config import DB_ENGINE
 """
  - 处理剪切任务队列
  - 处理转码任务队列
+ - 处理获取信息任务队列
 """
 
 async def fetch_next_mission(cursor):
@@ -30,23 +31,19 @@ async def fetch_next_mission(cursor):
     values = ()
     await cursor.execute(query, values)
     mission_info = await cursor.fetchone()
-    
-    # 如果是元组，转换为字典
-    if isinstance(mission_info, tuple):
-        mission_info = dict(zip([desc[0] for desc in cursor.description], mission_info))
+    # logger.debug(f"mission_info: {mission_info}")
+    mission_info = convert_row_to_dict(mission_info, cursor.description)  # 转换字典
+    logger.debug(f"mission_info: {mission_info}")
     return mission_info
 
 async def update_mission_status(cursor, mission_id, status):
     update_query = "UPDATE dav_missions SET status=%s WHERE id=%s"
     values = (status, mission_id,)
-    if DB_ENGINE == "sqlite": 
-        update_query = update_query.replace('%s', '?')
+    update_query = format_query_for_db(update_query)
     logger.debug(f"update_query: {update_query} values: {values}")
     await cursor.execute(update_query, values)
-    if DB_ENGINE == "sqlite": 
-        cursor.connection.commit()
-    else: 
-        await cursor.connection.commit()
+    if DB_ENGINE == "sqlite": cursor.connection.commit()
+    else: await cursor.connection.commit()
 
 async def update_local_file(cursor, local_id, local_file):
     # 获取文件大小 MB
@@ -64,14 +61,11 @@ async def update_local_file(cursor, local_id, local_file):
 
     update_query = "UPDATE dav_local SET file=%s,size=%s,created=%s,updated_time=NOW() WHERE id=%s"
     values = (file_name, file_size, file_createtime, local_id,)
-    if DB_ENGINE == "sqlite": 
-        update_query = update_query.replace('%s', '?').replace('NOW()','CURRENT_TIMESTAMP')
+    update_query = format_query_for_db(update_query)
     logger.debug(f"update_query: {update_query} values: {values}")
     await cursor.execute(update_query, values)
-    if DB_ENGINE == "sqlite": 
-        cursor.connection.commit()
-    else: 
-        await cursor.connection.commit()
+    if DB_ENGINE == "sqlite": cursor.connection.commit()
+    else: await cursor.connection.commit()
 
 async def process_mission(cursor, mission_info):
     type = mission_info['type']

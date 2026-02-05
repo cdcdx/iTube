@@ -2,8 +2,6 @@
 import re
 import os
 import sys
-import os
-import sys
 import time
 import datetime
 import asyncio
@@ -17,16 +15,16 @@ from pathlib import Path
 from datetime import timedelta
 from fastapi.responses import StreamingResponse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from loguru import logger
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-from utils.log import log as logger
-from config import *
+from config import web_headers, web_proxies
 
 """
 替换图片URL前缀
 """
-def replace_images_url(old_list, prefix='https://www.javbus.com'):
+def replace_images_url(old_list, prefix):
     prefix = prefix.rstrip('/')
     new_list = []
     for image in old_list:
@@ -147,12 +145,13 @@ def get_123av_title(code_name):
             logger.error(f"404 Page Not Found")
             return None
         
-        # # temp_log
-        # log_message = f"{datetime.datetime.now()} {code_name} - response: {response}\n"
-        # with open(f'jav_{code_name}_log.txt', 'w') as log_file:
-        #     log_file.write(log_message)
+        # temp_log
+        log_message = f"{datetime.datetime.now()} {code_name} - response: {response}\n"
+        with open(f'123_{code_name}_log.txt', 'w') as log_file:
+            log_file.write(log_message)
 
-        code_title=re.findall('<title>(.+)</title>',response)[0].strip().replace(' - 123AV','')
+        code_title=re.findall('<h1>(.+)</h1>',response)[0].strip().replace(' - 123AV','').replace('オンライン視聴, , ','').replace('オンライン視聴, ', '')
+        # code_title=re.findall('<title>(.+)</title>',response)[0].strip().replace(' - 123AV','').replace('オンライン視聴, , ','').replace('オンライン視聴, ', '')
         logger.debug(f"title: {code_title}")
         
         if code_title.lower().find(code_name.lower()) == -1:
@@ -162,23 +161,23 @@ def get_123av_title(code_name):
         date=re.findall('リリース日:</span>(.+)</p>',response)
         logger.debug(f"date: {date}")
 
-        pattern = r'<a href="https://www.javbus.com/studio/\w+">(.*?)</a>'
+        pattern = r'<a href="https://www.123av.com/studio/\w+">(.*?)</a>'
         studio = re.findall(pattern,response)
         logger.debug(f"studio: {studio}")
 
-        pattern = r'<a href="https://www.javbus.com/director/\w+">(.*?)</a>'
+        pattern = r'<a href="https://www.123av.com/director/\w+">(.*?)</a>'
         director = re.findall(pattern,response)
         logger.debug(f"director: {director}")
 
-        pattern = r'<a href="https://www.javbus.com/series/\w+">(.*?)</a>'
+        pattern = r'<a href="https://www.123av.com/series/\w+">(.*?)</a>'
         series = re.findall(pattern,response)
         logger.debug(f"series: {series}")
 
-        pattern = r'<a href="https://www.javbus.com/genre/\w+">(.*?)</a></label></span>'
+        pattern = r'<a href="https://www.123av.com/genre/\w+">(.*?)</a></label></span>'
         genre = re.findall(pattern,response)
         logger.debug(f"genre: {genre}")
 
-        pattern = r'<a href="https://www.javbus.com/star/\w+">([^<]+)</a>'
+        pattern = r'<a href="https://www.123av.com/star/\w+">([^<]+)</a>'
         actors = re.findall(pattern,response)
         logger.debug(f"actors: {actors}")
 

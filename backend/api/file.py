@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel
 
-from utils.db import database, get_db
+from utils.db import get_db, format_query_for_db, convert_row_to_dict, format_datetime_fields
 from utils.log import log as logger
 from utils.local import *
 from utils.web import *
@@ -33,14 +33,13 @@ async def get_video(id_name: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,resolution FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
         # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         path = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"path: {path}")
@@ -82,19 +81,19 @@ async def file_rename(id_name: str, new_base_name: str, cursor=Depends(get_db)):
             return HTMLResponse("Name cannot be empty", status_code=402)
 
         # 获取 srcpath
-        check_query = "SELECT path,file FROM dav_local WHERE id=%s"
+        check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:
             logger.warning(f"Database not found: {id_name}")
             return HTMLResponse("Database not found", status_code=404)
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
+
         srcpath = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"rename path: {srcpath}")
         srcfile = local_file['file']
@@ -139,7 +138,7 @@ async def file_rename(id_name: str, new_base_name: str, cursor=Depends(get_db)):
         # 修改数据库
         update_query = "UPDATE dav_local SET code=%s,name=%s,file=%s,updated_time=NOW() WHERE id=%s"
         values = (dstcode, dstname, dstfile, id_name,)
-        if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?').replace('NOW()','CURRENT_TIMESTAMP')
+        update_query = format_query_for_db(update_query)
         logger.debug(f"update_query: {update_query} values: {values}")
         await cursor.execute(update_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
@@ -165,26 +164,26 @@ async def file_webname(id_name: str, cursor=Depends(get_db)):
 
     try:
         # 获取 srcpath
-        check_query = "SELECT code,path,file FROM dav_local WHERE id=%s"
+        check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:
             logger.warning(f"Database not found: {id_name}")
             return HTMLResponse("Database not found", status_code=404)
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
+
         srcpath = os.path.join(local_file['path'], local_file['file'])
-        logger.debug(f"rename path: {srcpath}")
+        logger.debug(f"webname path: {srcpath}")
         srcfile = local_file['file']
         # logger.debug(f"srcfile: {srcfile}")
 
         src_path = Path(srcpath)
-        # logger.debug(f"rename src_path: {src_path}")
+        # logger.debug(f"webname src_path: {src_path}")
         if not src_path.exists():
             logger.warning(f"Video not found: {id_name}")
             return HTMLResponse("Video not found", status_code=404)
@@ -202,11 +201,39 @@ async def file_webname(id_name: str, cursor=Depends(get_db)):
         # 获取code信息
         check_query = "SELECT code,name,date,studio,director,series,genre,websites,actors,images,score FROM dav_web WHERE code=%s"
         values = (code_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         code_info = await cursor.fetchone()
+        # logger.debug(f"code_info: {code_info}")
+        code_info = convert_row_to_dict(code_info, cursor.description)  # 转换字典
+        logger.debug(f"code_info: {code_info}")
         if code_info is None:
+            if code_name.upper().startswith('FC2-'):
+                code_info = get_123av_title(code_name)
+            else:
+                code_info = get_javbus_title(code_name)
+            logger.debug(f"code_info: {code_info}")
+            # insert web
+            if code_info is None:
+                insert_query = "INSERT INTO dav_web (code,name,status) SELECT %s, %s, %s WHERE NOT EXISTS (SELECT 1 FROM dav_web WHERE code=%s)"
+                values = (code_name, code_name, 0, code_name,)
+            else:
+                insert_query = "INSERT INTO dav_web (code,name,date,studio,director,series,genre,websites,actors,images,status) SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s WHERE NOT EXISTS (SELECT 1 FROM dav_web WHERE code=%s)"
+                values = (code_info['code'], code_info['name'], code_info['date'], code_info['studio'], code_info['director'], code_info['series'], json.dumps(code_info['genre'], ensure_ascii=False),  json.dumps(code_info['websites']), json.dumps(code_info['actors'], ensure_ascii=False), json.dumps(code_info['images'], ensure_ascii=False), 1, code_info['code'],)
+            insert_query = format_query_for_db(insert_query)
+            logger.debug(f"insert_query: {insert_query} values: {values}")
+            await cursor.execute(insert_query, values)
+            if DB_ENGINE == "sqlite": cursor.connection.commit()
+            else: await cursor.connection.commit()
+
+            if code_info is None:
+                return {
+                    "code": 404,
+                    "success": False,
+                    "msg": "Code not found",
+                }
+        elif len(code_info['code'])==len(code_info['name']):
             if code_name.upper().startswith('FC2-'):
                 code_info = get_123av_title(code_name)
             else:
@@ -218,29 +245,31 @@ async def file_webname(id_name: str, cursor=Depends(get_db)):
                     "success": False,
                     "msg": "Code not found",
                 }
-            # Insert web
-            insert_query = "INSERT INTO dav_web (code,name,date,studio,director,series,genre,websites,actors,images) SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s WHERE NOT EXISTS (SELECT 1 FROM dav_web WHERE code=%s)"
-            values = (code_info['code'], code_info['name'], code_info['date'], code_info['studio'], code_info['director'], code_info['series'], json.dumps(code_info['genre'], ensure_ascii=False),  json.dumps(code_info['websites']), json.dumps(code_info['actors'], ensure_ascii=False), json.dumps(code_info['images'], ensure_ascii=False), code_info['code'],)
-            if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
-            # logger.debug(f"insert_query: {insert_query} values: {values}")
-            await cursor.execute(insert_query, values)
+            # update web
+            update_query = "UPDATE dav_web set code=%s,name=%s,date=%s,studio=%s,director=%s,series=%s,genre=%s,websites=%s,actors=%s,images=%s,status=%s WHERE code=%s"
+            values = (code_info['code'], code_info['name'], code_info['date'], code_info['studio'], code_info['director'], code_info['series'], json.dumps(code_info['genre'], ensure_ascii=False),  json.dumps(code_info['websites']), json.dumps(code_info['actors'], ensure_ascii=False), json.dumps(code_info['images'], ensure_ascii=False), code_info['code'], 1,)
+            update_query = format_query_for_db(update_query)
+            logger.debug(f"update_query: {update_query} values: {values}")
+            await cursor.execute(update_query, values)
             if DB_ENGINE == "sqlite": cursor.connection.commit()
             else: await cursor.connection.commit()
-        # 如果是元组，转换为字典
-        if isinstance(code_info, tuple):
-            code_info = dict(zip([desc[0] for desc in cursor.description], code_info))
-        logger.debug(f"code_info: {code_info}")
+
         # ------------------------------------------------------
 
         to_extend = os.path.splitext(srcfile)[1].lower()
-        dstname = code_info['name'].replace('/', ' ')
+        srcname = os.path.splitext(srcfile)[0].strip().split('-')
+        # logger.debug(f"srcname: {srcname} ({type(srcname)})")
+        srcmark = f"-{srcname[-1]}" if len(srcname[-1]) == 1 else ''
+        # logger.debug(f"srcmark: {srcmark} ({type(srcmark)})")
+        dstname = code_info['name'].replace('/', ' ').replace('*', ' ').replace('?', ' ').replace('&amp;', '&').replace('&quot;', '"').replace('&lt;', '<').replace('&gt;', '>').replace('&nbsp;', '').replace('&#039;', "'")
+        # logger.debug(f"dstname: {dstname} ({type(dstname)})")
         dstcode = dstname.split(' ')[0] # 获取识别码
-        dstfile = f"{dstname}{to_extend}"
+        dstfile = f"{dstname}{srcmark}{to_extend}"
         dstpath = os.path.join(local_file['path'], dstfile)
         logger.debug(f"dstpath: {dstpath}")
 
         dst_path = Path(dstpath)
-        logger.debug(f"rename dst_path: {dst_path}")
+        logger.debug(f"webname dst_path: {dst_path}")
         if dst_path.exists():
             logger.warning(f"File already exists: {id_name}")
             return HTMLResponse("File already exists", status_code=401)
@@ -259,7 +288,7 @@ async def file_webname(id_name: str, cursor=Depends(get_db)):
         # 修改数据库
         update_query = "UPDATE dav_local SET code=%s,name=%s,file=%s,updated_time=NOW() WHERE id=%s"
         values = (dstcode, dstname, dstfile, id_name,)
-        if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?').replace('NOW()','CURRENT_TIMESTAMP')
+        update_query = format_query_for_db(update_query)
         logger.debug(f"update_query: {update_query} values: {values}")
         await cursor.execute(update_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
@@ -291,12 +320,12 @@ async def file_keyname(old_key: str, new_key: str, cursor=Depends(get_db)):
         # 获取匹配的文件列表
         check_query = "SELECT id,code,name,path,file FROM dav_local WHERE INSTR(UPPER(file), UPPER(%s))>0"
         values = (old_key,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_files = await cursor.fetchall()
         local_files_len = len(local_files)
         logger.debug(f"find {old_key} - {local_files_len} {local_files[0] if local_files_len>0 else ''}")
-        
         if local_files_len == 0:
             return {
                 "code": 200,
@@ -305,13 +334,23 @@ async def file_keyname(old_key: str, new_key: str, cursor=Depends(get_db)):
                 "data": "No files matched the criteria",
             }
         
+        # logger.debug(f"local_files: {local_files}")
+        if isinstance(local_files, (list, tuple)) and local_files_len > 0: # 转换字典列表
+            converted_list = []
+            for row in local_files: # 将每一行转换为字典
+                row_dict = convert_row_to_dict(row, cursor.description)  # 转换字典
+                formatted_row = format_datetime_fields(row_dict)  # DATETIME转字符串
+                converted_list.append(formatted_row)
+            local_files = converted_list
+        logger.debug(f"local_files: {local_files[0] if len(local_files)>0 else ''}")
+
         file_count = 0  # 成功处理的文件计数
         updated_records = []  # 存储需要更新的记录
         
         for local_file in local_files:
-            # 如果是元组，转换为字典
-            if isinstance(local_file, tuple):
-                local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
+            # logger.debug(f"local_file: {local_file}")
+            local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+            logger.debug(f"local_file: {local_file}")
             
             id_name = local_file['id']
             srcfile = local_file['file']
@@ -351,16 +390,17 @@ async def file_keyname(old_key: str, new_key: str, cursor=Depends(get_db)):
                 # 修改数据库
                 update_query = "UPDATE dav_local SET name=%s,file=%s,updated_time=NOW() WHERE id=%s"
                 values = (dstname, dstfile, id_name,)
-                if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?').replace('NOW()','CURRENT_TIMESTAMP')
+                update_query = format_query_for_db(update_query)
+                logger.debug(f"update_query: {update_query} values: {values}")
                 await cursor.execute(update_query, values)
                 
                 # 修改文件名
                 os.rename(src_path, dst_path)
                 
                 success_count += 1
-                logger.success(f"File rename successful! id: {id_name} - {success_count}/{file_count}")
+                logger.success(f"File keyname successful! id: {id_name} - {success_count}/{file_count}")
             except Exception as e:
-                logger.error(f"Failed to rename file {src_path}: {str(e)}")
+                logger.error(f"Failed to keyname file {src_path}: {str(e)}")
                 # 如果需要严格模式，可以在这里回滚或者抛出异常
         
         # 统一提交数据库更改
@@ -370,7 +410,7 @@ async def file_keyname(old_key: str, new_key: str, cursor=Depends(get_db)):
         # 关键字是否存在: 不存在则入库, 存在则将更新次数
         check_query = "SELECT id FROM dav_keyword WHERE `old_key`=%s and status=0 and id>0"
         values = (old_key,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+        check_query = format_query_for_db(check_query)
         logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         recoed_keys = await cursor.fetchone()
@@ -379,35 +419,28 @@ async def file_keyname(old_key: str, new_key: str, cursor=Depends(get_db)):
             # 更新搜索次数
             update_query = "UPDATE dav_keyword SET count=(count+1) WHERE `old_key`=%s"
             values = (old_key,)
-            if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?')
-            # logger.debug(f"update_query: {update_query} values: {values}")
+            update_query = format_query_for_db(update_query)
+            logger.debug(f"update_query: {update_query} values: {values}")
             await cursor.execute(update_query, values)
         else:
             # 插入搜索记录
             insert_query = "INSERT INTO dav_keyword (`old_key`, `new_key`, count) VALUES (%s, %s, %s)"
             values = (old_key, new_key, 1,)
-            if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
-            # logger.debug(f"insert_query: {insert_query} values: {values}")
+            insert_query = format_query_for_db(insert_query)
+            logger.debug(f"insert_query: {insert_query} values: {values}")
             await cursor.execute(insert_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
         else: await cursor.connection.commit()
         
-        logger.success(f"Batch file rename completed! Success: {success_count}/{file_count}")
+        logger.success(f"Batch file keyname completed! Success: {success_count}/{file_count}")
         return {
             "code": 200,
             "success": True,
             "msg": "Success",
-            "data": f"File rename successful! {success_count}/{file_count}",
+            "data": f"File keyname successful! {success_count}/{file_count}",
         }
     except Exception as e:
         logger.error(f"/api/keyname - key_name: {old_key} - except ERROR: {str(e)}")
-        return {"code": 500, "success": False, "msg": "Server error"}
-        # 尝试回滚数据库更改
-        try:
-            if DB_ENGINE == "sqlite": cursor.connection.rollback()
-            else: await cursor.connection.rollback()
-        except:
-            pass
         return {"code": 500, "success": False, "msg": "Server error"}
 
 
@@ -432,17 +465,16 @@ async def file_delete(id_name: str, pwd: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:  # 数据库未找到
             logger.warning(f"Database not found: {id_name}")
             return {"code": 400, "success": False, "msg": "Database not found"}
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         path = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"delete path: {path}")
@@ -455,7 +487,7 @@ async def file_delete(id_name: str, pwd: str, cursor=Depends(get_db)):
         # 数据库删除
         update_query = "UPDATE dav_local SET status=1, updated_time=NOW() WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?').replace('NOW()','CURRENT_TIMESTAMP')
+        update_query = format_query_for_db(update_query)
         logger.debug(f"update_query: {update_query} values: {values}")
         await cursor.execute(update_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
@@ -470,7 +502,10 @@ async def file_delete(id_name: str, pwd: str, cursor=Depends(get_db)):
             os.remove(path)
             logger.info(f"File {path} remove successfully.")
         except OSError as e:
-            logger.error(f"File remove Error: {e}")
+            if e.errno == 2:  # 文件不存在
+                logger.info(f"File already not exists when trying to remove: {path}")
+            else:
+                logger.error(f"File remove Error: {e}")
 
         # 计算hash
         video_hash = hashlib.sha256(path.encode()).hexdigest()
@@ -484,7 +519,10 @@ async def file_delete(id_name: str, pwd: str, cursor=Depends(get_db)):
             os.remove(thumbnail_path)
             logger.info(f"Thumbnail {thumbnail_path} remove successfully.")
         except OSError as e:
-            logger.error(f"Thumbnail remove Error: {e}")
+            if e.errno == 2:  # 文件不存在
+                logger.info(f"Thumbnail already not exists when trying to remove: {thumbnail_path}")
+            else:
+                logger.error(f"Thumbnail remove Error: {e}")
 
         logger.success(f"File deleted successful! id: {id_name}")
         return {
@@ -508,17 +546,16 @@ async def file_syncthumbnail(id_name: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:  # 数据库未找到
             logger.warning(f"Database not found: {id_name}")
             return {"code": 400, "success": False, "msg": "Database not found"}
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         path = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"path: {path}")
@@ -559,17 +596,16 @@ async def file_cut(id_name: str, second: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:  # 数据库未找到
             logger.warning(f"Database not found: {id_name}")
             return {"code": 400, "success": False, "msg": "Database not found"}
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         frompath = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"cut path: {frompath} second: {second}")
@@ -589,8 +625,8 @@ async def file_cut(id_name: str, second: str, cursor=Depends(get_db)):
         # 任务是否存在
         check_query = "SELECT id,status FROM dav_missions WHERE localid=%s and path=%s and file=%s and type=%s"
         values = (id_name, local_file['path'], local_file['file'], 1,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         exist_mission = await cursor.fetchone()
         if exist_mission:
@@ -605,7 +641,7 @@ async def file_cut(id_name: str, second: str, cursor=Depends(get_db)):
         # 插入剪切任务
         insert_query = "INSERT INTO dav_missions (localid, path, file, type, start, end) VALUES (%s, %s, %s, %s, %s, %s) "
         values = (id_name, local_file['path'], local_file['file'], 1, int(second), 0,)
-        if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
+        insert_query = format_query_for_db(insert_query)
         logger.debug(f"insert_query: {insert_query} values: {values}")
         await cursor.execute(insert_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
@@ -625,7 +661,7 @@ async def file_cut(id_name: str, second: str, cursor=Depends(get_db)):
 
 ## score
 @router.get("/score/{id_name}/{stars}")
-async def file_star(id_name: str, stars: str, cursor=Depends(get_db)):
+async def file_star(id_name: str, stars: int, cursor=Depends(get_db)):
     """文件评分"""
     logger.info(f"/api/score - id_name: {id_name}")
 
@@ -633,17 +669,16 @@ async def file_star(id_name: str, stars: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:  # 数据库未找到
             logger.warning(f"Database not found: {id_name}")
             return {"code": 400, "success": False, "msg": "Database not found"}
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         frompath = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"score path: {frompath} stars: {stars}")
@@ -659,47 +694,44 @@ async def file_star(id_name: str, stars: str, cursor=Depends(get_db)):
             }
         # logger.debug(f"code_name: {code_name}")
         # 获取code信息
-        check_query = "SELECT code,name,date,studio,director,series,genre,websites,actors,images,score FROM dav_web WHERE code=%s"
+        check_query = "SELECT id,code,name,score FROM dav_web WHERE code=%s"
         values = (code_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         code_info = await cursor.fetchone()
+        # logger.debug(f"code_info: {code_info}")
+        code_info = convert_row_to_dict(code_info, cursor.description)  # 转换字典
+        logger.debug(f"code_info: {code_info}")
         if code_info is None:
-            if code_name.upper().startswith('FC2-'):
-                code_info = get_123av_title(code_name)
-            else:
-                code_info = get_javbus_title(code_name)
-            logger.debug(f"code_info: {code_info}")
-            if code_info is None:
-                return {
-                    "code": 404,
-                    "success": False,
-                    "msg": "Code not found",
-                }
-            # Insert web
-            insert_query = "INSERT INTO dav_web (code,name,date,studio,director,series,genre,websites,actors,images) SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s WHERE NOT EXISTS (SELECT 1 FROM dav_web WHERE code=%s)"
-            values = (code_info['code'], code_info['name'], code_info['date'], code_info['studio'], code_info['director'], code_info['series'], json.dumps(code_info['genre'], ensure_ascii=False),  json.dumps(code_info['websites']), json.dumps(code_info['actors'], ensure_ascii=False), json.dumps(code_info['images'], ensure_ascii=False), code_info['code'],)
-            if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
-            # logger.debug(f"insert_query: {insert_query} values: {values}")
+            # insert web
+            insert_query = "INSERT INTO dav_web (code,name,score,status) SELECT %s, %s, %s, %s WHERE NOT EXISTS (SELECT 1 FROM dav_web WHERE code=%s)"
+            values = (code_name, code_name, stars, 0, code_name,)
+            insert_query = format_query_for_db(insert_query)
+            logger.debug(f"insert_query: {insert_query} values: {values}")
             await cursor.execute(insert_query, values)
             if DB_ENGINE == "sqlite": cursor.connection.commit()
             else: await cursor.connection.commit()
-        # 如果是元组，转换为字典
-        if isinstance(code_info, tuple):
-            code_info = dict(zip([desc[0] for desc in cursor.description], code_info))
-        logger.debug(f"code_info: {code_info}")
+        elif int(code_info['score'])==stars:
+            logger.error(f"id: {id_name} - score: {stars}")
+            return {
+                "code": 200,
+                "success": True,
+                "msg": "Success",
+                "data": "Score successful"
+            }
+        else:
+            # update web
+            update_query = "UPDATE dav_web SET score=%s,updated_time=NOW() WHERE id=%s"
+            values = (stars, code_info['id'],)
+            update_query = format_query_for_db(update_query)
+            logger.debug(f"update_query: {update_query} values: {values}")
+            await cursor.execute(update_query, values)
+            if DB_ENGINE == "sqlite": cursor.connection.commit()
+            else: await cursor.connection.commit()
+
         # ------------------------------------------------------
         
-        # 修改数据库
-        update_query = "UPDATE dav_web SET score=%s,updated_time=NOW() WHERE code=%s"
-        values = (stars, code_name,)
-        if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?').replace('NOW()','CURRENT_TIMESTAMP')
-        logger.debug(f"update_query: {update_query} values: {values}")
-        await cursor.execute(update_query, values)
-        if DB_ENGINE == "sqlite": cursor.connection.commit()
-        else: await cursor.connection.commit()
-
         logger.success(f"id: {id_name} - score: {stars}")
         return {
             "code": 200,
@@ -722,17 +754,16 @@ async def file_transcode(id_name: str, cursor=Depends(get_db)):
         # 获取path
         check_query = "SELECT id,code,path,file,status FROM dav_local WHERE id=%s"
         values = (id_name,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_file = await cursor.fetchone()
-        # 如果是元组，转换为字典
-        if isinstance(local_file, tuple):
-            local_file = dict(zip([desc[0] for desc in cursor.description], local_file))
-        # logger.debug(f"local_file: {local_file}")
         if local_file is None:  # 数据库未找到
             logger.warning(f"Database not found: {id_name}")
             return {"code": 400, "success": False, "msg": "Database not found"}
+        # logger.debug(f"local_file: {local_file}")
+        local_file = convert_row_to_dict(local_file, cursor.description)  # 转换字典
+        logger.debug(f"local_file: {local_file}")
 
         frompath = os.path.join(local_file['path'], local_file['file'])
         logger.debug(f"transcode path: {frompath}")
@@ -748,8 +779,8 @@ async def file_transcode(id_name: str, cursor=Depends(get_db)):
         # 任务是否存在
         check_query = "SELECT id,status FROM dav_missions WHERE localid=%s and path=%s and file=%s and type=%s"
         values = (id_name, local_file['path'], local_file['file'], 2,)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-        # logger.debug(f"check_query: {check_query} values: {values}")
+        check_query = format_query_for_db(check_query)
+        logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         exist_mission = await cursor.fetchone()
         if exist_mission:
@@ -764,7 +795,7 @@ async def file_transcode(id_name: str, cursor=Depends(get_db)):
         # 插入转码任务
         insert_query = "INSERT INTO dav_missions (localid, path, file, type) VALUES (%s, %s, %s, %s) "
         values = (id_name, local_file['path'], local_file['file'], 2,)
-        if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
+        insert_query = format_query_for_db(insert_query)
         logger.debug(f"insert_query: {insert_query} values: {values}")
         await cursor.execute(insert_query, values)
         if DB_ENGINE == "sqlite": cursor.connection.commit()
@@ -803,7 +834,6 @@ async def folder_scan(background_tasks: BackgroundTasks, path: str | None='all',
         # 后台任务 - 扫盘
         background_tasks.add_task(
             sync_scan_path,
-            cursor=cursor,
             localpaths=localpaths,
         )
 
@@ -844,15 +874,19 @@ async def sync_thumbnail(background_tasks: BackgroundTasks, path: str | None='al
         else:
             check_query = "SELECT id,code,path,file,size,duration,aspectratio,resolution,created FROM dav_local WHERE path=%s and status=0 and id>0 ORDER BY code ASC"
             values = (localpaths[0],)
-        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
+        check_query = format_query_for_db(check_query)
         logger.debug(f"check_query: {check_query} values: {values}")
         await cursor.execute(check_query, values)
         local_files = await cursor.fetchall()
-        # 如果是元组，转换为字典
-        if local_files and isinstance(local_files[0], tuple):
-            columns = [desc[0] for desc in cursor.description]
-            local_files = [dict(zip(columns, row)) for row in local_files]
         # logger.debug(f"local_files: {local_files}")
+        if isinstance(local_files, (list, tuple)) and len(local_files) > 0: # 转换字典列表
+            converted_list = []
+            for row in local_files: # 将每一行转换为字典
+                row_dict = convert_row_to_dict(row, cursor.description)  # 转换字典
+                formatted_row = format_datetime_fields(row_dict)  # DATETIME转字符串
+                converted_list.append(formatted_row)
+            local_files = converted_list
+        logger.debug(f"local_files: {local_files[0] if len(local_files)>0 else ''}")
 
         # 后台任务 - 批量生成视频预览图
         background_tasks.add_task(

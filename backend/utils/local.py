@@ -14,11 +14,14 @@ import ssl
 from zlib import crc32
 from pathlib import Path
 from datetime import timedelta
-from fastapi.responses import StreamingResponse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from fastapi.responses import StreamingResponse
+from loguru import logger
 
-from utils.log import log as logger
-from config import *
+from utils.db import get_db, get_db_app, format_query_for_db, convert_row_to_dict, format_datetime_fields
+from config import BASE_DIR, DB_ENGINE, SSL_CERTFILE, SSL_KEYFILE
+from config import TEMP_PATH, TEMP2_PATH, THUMBNAIL_TIME, THUMBNAIL_COMPRESSION, THUMBNAIL_CLEAR # THUMBNAIL
+from config import APP_PAGE_LIMIT, SCAN_CODE, SCAN_EXT_LIST, PATH_FILTER_LIST # PATH
 
 # 2FA
 import pyotp
@@ -107,6 +110,30 @@ def contains_chinese(text):
     字符串含有中文
     """
     return re.search(r'[\u4e00-\u9fff]', text) is not None
+
+def delete_dir_file(dir_path):
+    """
+    递归删除文件夹下文件
+    """
+    if not THUMBNAIL_CLEAR:
+        return
+    if not os.path.exists(dir_path):
+        return
+    # 判断是不是一个文件路径，并且存在
+    if os.path.isfile(dir_path) and os.path.exists(dir_path):
+        # 删除文件
+        try:
+            os.remove(dir_path)
+            logger.info(f"File {dir_path} remove successfully.")
+        except OSError as e:
+            logger.error(f"File remove Error: {e}")
+    else:
+        file_list = os.listdir(dir_path)
+        for file_name in file_list:
+            delete_dir_file(os.path.join(dir_path, file_name))
+    # 递归删除空文件夹
+    if os.path.exists(dir_path):
+        os.rmdir(dir_path)
 
 def delete_file(dir_path, id):
     """
@@ -302,6 +329,20 @@ def get_video_info(filepath):
     cap.release()
     return info
 
+def get_crf_value(filepath):
+    """
+    根据文件扩展名和大小返回相应的CRF值 0无损 23默认 51最差 8 10 12 15
+    如果是avi结尾crf为12 如果size大于4GB,crf为15
+    """
+    file_ext = os.path.splitext(filepath)[1].lower()
+    file_size_gb = get_file_size(filepath) / 1024  # 转换为GB
+    
+    if file_ext == '.avi':
+        return '10'
+    elif file_size_gb > 4:  # 大于4GB
+        return '15'
+    else:
+        return '12'  # 默认值
 # ------------------------------------------------------
 
 def check_ffmpeg_processes():
@@ -398,6 +439,7 @@ def sync_file_transcode(frompath, topath, id):
         logger.error(f"Duration parsing error: Invalid sample size - {frompath}")
         return {"code": 400, "success": False, "msg": "Duration parsing error: Invalid sample size"}
 
+    crf_value = get_crf_value(frompath)
     ## 视频转码
     command = [
         'ffmpeg', '-y',
@@ -405,7 +447,7 @@ def sync_file_transcode(frompath, topath, id):
         '-c:v', 'libx264',  # 使用 libx264 编码器
         '-c:a', 'aac',      # 使用 aac 编码器
         '-preset', 'slow',  # 编码速度 ultrafast superfast veryfast faster fast medium slow slower veryslow
-        '-crf', '15',       # 质量  0无损 23默认 51最差 8 10 12 15
+        '-crf', str(crf_value),    # 质量  0无损 23默认 51最差 8 10 12 15
         '-movflags', 'faststart',  # 视频快速启动，将视频元数据(moov atom)移到文件开头
         '-loglevel', 'quiet',
         str(topath)
@@ -442,169 +484,173 @@ def sync_file_transcode(frompath, topath, id):
     logger.success(f"File transcode successfully! id: {id}")
 
 # /api/scan 扫描路径
-def sync_scan_path(cursor, localpaths):
-    for localpath in localpaths:
-        logger.info(f"scan path: {localpath}")
-        for fpathe, dirs, files in os.walk(localpath):
-            # 路径关键字在过滤列表里
-            if any(filter in fpathe for filter in PATH_FILTER_LIST):
-                logger.trace(f"The path keywords are in the filter list - fpathe: {fpathe}")
-                continue
-
-            files.sort()
-            for file in files:
-                # logger.debug(f"file: {file}")
-                # 合成文件路径
-                file_full = os.path.join(fpathe, file)
-                # logger.debug(f"file_full: {file_full}")
-
-                # 过滤mac垃圾文件
-                if file.startswith(".DS_Store") or file.startswith("._"):
-                    if os.path.isfile(file_full):
-                        # 删除文件
-                        try:
-                            os.remove(file_full)
-                            logger.info(f"File {file_full} remove successfully.")
-                        except OSError as e:
-                            logger.error(f"File remove Error: {e}")
-                    continue
-
-                # Check if file already exists
-                check_query = "SELECT id FROM dav_local WHERE path=%s and file=%s"
-                values = (fpathe, file,)
-                if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-                # logger.debug(f"check_query: {check_query} values: {values}")
-                asyncio.run(cursor.execute(check_query, values))
-                exist_file = asyncio.run(cursor.fetchone())
-                # 如果是元组，转换为字典
-                if isinstance(exist_file, tuple):
-                    exist_file = dict(zip([desc[0] for desc in cursor.description], exist_file))
-                # logger.debug(f"exist_file: {exist_file}")
-                if exist_file:
-                    # traceLog.add(f"File has been added - {file}")
-                    logger.trace(f"File has been added - {file}")
-                    continue
-                else:  # 数据库没有，开始入库逻辑
-                    # 获取 文件名 后缀
-                    file_name = os.path.splitext(file)[0]
-                    file_ext = os.path.splitext(file)[1]
-                    # logger.debug(f"file_path: {fpathe} / file_name: {file_name} / file_ext: {file_ext}")
-
-                    # 文件后缀不在支持数组列表里
-                    if not file_ext.lower() in SCAN_EXT_LIST:
-                        logger.trace(f"Unknown extension: {file_ext.lower()} - {file_full}")
+def sync_scan_path(localpaths):
+    async def run_async_scan():
+        async with get_db_app() as cursor:
+            for localpath in localpaths:
+                logger.info(f"scan path: {localpath}")
+                for fpathe, dirs, files in os.walk(localpath):
+                    # 路径关键字在过滤列表里
+                    if any(filter in fpathe for filter in PATH_FILTER_LIST):
+                        logger.trace(f"The path keywords are in the filter list - fpathe: {fpathe}")
                         continue
 
-                    # 文件名过滤luan/small
-                    if '-luan' in file_name or '-small' in file_name or '-good' in file_name:
-                        file_name = file_name.rsplit('-', 1)[0]
-                        logger.debug(f"2 file_path: {fpathe} / file_name: {file_name} / file_ext: {file_ext}")
+                    files.sort()
+                    for file in files:
+                        # logger.debug(f"file: {file}")
+                        # 合成文件路径
+                        file_full = os.path.join(fpathe, file)
+                        # logger.debug(f"file_full: {file_full}")
 
-                    if SCAN_CODE:
-                        # 获取识别码
-                        file_code = file_name.split(' ')[0]
-                        # logger.debug(f"file_code: {file_code}")
-                        # 识别码含有未知字符
-                        if not contains_alpha_numeric_symbol(file_code):
-                            logger.error(f"The code contains unknown characters: {file_code} - {file_full}")
+                        # 过滤mac垃圾文件
+                        if file.startswith(".DS_Store") or file.startswith("._"):
+                            if os.path.isfile(file_full):
+                                # 删除文件
+                                try:
+                                    os.remove(file_full)
+                                    logger.info(f"File {file_full} remove successfully.")
+                                except OSError as e:
+                                    logger.error(f"File remove Error: {e}")
                             continue
-                        # 识别码含有中文字符
-                        if contains_chinese(file_code):
-                            logger.error(f"The code contains Chinese characters: {file_code} - {file_full}")
+
+                        # Check if file already exists
+                        check_query = "SELECT id FROM dav_local WHERE path=%s and file=%s and status=0"
+                        values = (fpathe, file,)
+                        check_query = format_query_for_db(check_query)
+                        logger.debug(f"check_query: {check_query} values: {values}")
+                        await cursor.execute(check_query, values)
+                        exist_file = await cursor.fetchone()
+                        # logger.debug(f"exist_file: {exist_file}")
+                        exist_file = convert_row_to_dict(exist_file, cursor.description)  # 转换字典
+                        logger.debug(f"exist_file: {exist_file}")
+                        if exist_file:
+                            # traceLog.add(f"File has been added - {file}")
+                            logger.trace(f"File has been added - {file}")
                             continue
-                        # 识别码超长
-                        if len(file_code) > 48:
-                            logger.error(f"The code is too long: {file_code} - {file_full}")
-                            continue
-                    else:
-                        file_code = ""
+                        else:  # 数据库没有，开始入库逻辑
+                            # 获取 文件名 后缀
+                            file_name = os.path.splitext(file)[0]
+                            file_ext = os.path.splitext(file)[1]
+                            # logger.debug(f"file_path: {fpathe} / file_name: {file_name} / file_ext: {file_ext}")
 
-                    # 获取文件大小 MB
-                    file_size = get_file_size(file_full)
-                    # logger.debug(f"size: {file_size} MB")
-                    if file_size < 1:
-                        logger.debug(f"Abnormal file size: < 1 MB - {file_full}")
-                        continue
+                            # 文件后缀不在支持数组列表里
+                            if not file_ext.lower() in SCAN_EXT_LIST:
+                                logger.trace(f"Unknown extension: {file_ext.lower()} - {file_full}")
+                                continue
 
-                    # 获取文件创建时间
-                    file_createtime = get_file_createtime(file_full)
-                    # logger.debug(f"time: {file_createtime}")
-                    # # 获取文件crc
-                    # file_crc = get_file_crc(file_full)
-                    # logger.debug(f"crc: {file_crc}")
+                            # 文件名过滤luan/small
+                            if '-luan' in file_name or '-small' in file_name or '-good' in file_name:
+                                file_name = file_name.rsplit('-', 1)[0]
+                                logger.debug(f"2 file_path: {fpathe} / file_name: {file_name} / file_ext: {file_ext}")
 
-                    # 获取视频信息
-                    file_info = get_video_info(file_full)
-                    file_resolution = f"{int(file_info['height'])}p"
-                    file_aspectratio = file_info['aspectratio']
-                    file_duration = file_info['duration']
-                    file_fps = file_info['fps']
-                    if file_resolution == '0p':
-                        logger.error(f"Resolution parsing error: moov atom not found - {file_full}")
-                        continue
-                    if file_aspectratio == 0:
-                        logger.error(f"Aspectratio parsing error: moov atom not found - {file_full}")
-                        continue
-                    if file_duration == 0.0:
-                        logger.error(f"Duration parsing error: Invalid sample size - {file_full}")
-                        continue
-                    if file_fps == 0.0:
-                        logger.error(f"fps parsing error: Invalid fps size - {file_full}")
-                        continue
-                    # 视频时长 转 时分秒
-                    file_hms = duration_to_hms(file_duration)
-                    # logger.debug(f"duration: {file_duration} => hms: {file_hms}")
+                            if SCAN_CODE:
+                                # 获取识别码
+                                file_code = file_name.split(' ')[0]
+                                # logger.debug(f"file_code: {file_code}")
+                                # 识别码含有未知字符
+                                if not contains_alpha_numeric_symbol(file_code):
+                                    logger.error(f"The code contains unknown characters: {file_code} - {file_full}")
+                                    continue
+                                # 识别码含有中文字符
+                                if contains_chinese(file_code):
+                                    logger.error(f"The code contains Chinese characters: {file_code} - {file_full}")
+                                    continue
+                                # 识别码超长
+                                if len(file_code) > 48:
+                                    logger.error(f"The code is too long: {file_code} - {file_full}")
+                                    continue
+                            else:
+                                file_code = ""
 
-                    logger.debug(f"code: {file_code} / file: {file_full} / size: {file_size} MB / duration: {file_hms} / resolution: {file_resolution} / fps: {file_fps}")
+                            # 获取文件大小 MB
+                            file_size = get_file_size(file_full)
+                            # logger.debug(f"size: {file_size} MB")
+                            if file_size < 1:
+                                logger.debug(f"Abnormal file size: < 1 MB - {file_full}")
+                                continue
 
-                    # 使用 ffmpeg 获取视频信息
-                    try:
-                        filepath = os.path.join(fpathe, file)
-                        probe = ffmpeg.probe(filepath)
-                        video_info = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-                        logger.debug(f"video_info: {video_info}")
-                        video_format = probe['format']
-                        logger.debug(f"video_format: {video_format}")
-                        video_format_name = video_format['format_name']
-                        logger.debug(f"video_format_name: {video_format_name}")
-                    except ffmpeg.Error as e:
-                        video_format_name = ""
-                        logger.error(f"FFmpeg error: {e.stderr.decode()}")
-                    logger.debug(f"video_format_name: {video_format_name}")
+                            # 获取文件创建时间
+                            file_createtime = get_file_createtime(file_full)
+                            # logger.debug(f"time: {file_createtime}")
+                            # # 获取文件crc
+                            # file_crc = get_file_crc(file_full)
+                            # logger.debug(f"crc: {file_crc}")
 
-                    update_id = 0
-                    if file_code != "":
-                        # Check if code already exists
-                        check_query = "SELECT id FROM dav_local WHERE path=%s and code=%s and size=%s and duration=%s"
-                        values = (fpathe, file_code, file_size, file_duration,)
-                        if DB_ENGINE == "sqlite": check_query = check_query.replace('%s','?')
-                        # logger.debug(f"check_query: {check_query} values: {values}")
-                        asyncio.run(cursor.execute(check_query, values))
-                        exist_code = asyncio.run(cursor.fetchone())
-                        # 如果是元组，转换为字典
-                        if isinstance(exist_code, tuple):
-                            exist_code = dict(zip([desc[0] for desc in cursor.description], exist_code))
-                        logger.debug(f"exist_code: {exist_code}")
-                        update_id = exist_code['id'] if exist_code else 0
-                    
-                    if update_id > 0:
-                        # Update File
-                        update_query = "UPDATE dav_local SET name=%s, file=%s WHERE id=%s"
-                        values = (file_name, file, update_id,)
-                        if DB_ENGINE == "sqlite": update_query = update_query.replace('%s','?')
-                        # logger.debug(f"update_query: {update_query} values: {values}")
-                        asyncio.run(cursor.execute(update_query, values))
-                    else:
-                        # Insert File
-                        insert_query = "INSERT INTO dav_local (code, name, path, file, size, created, duration, aspectratio, resolution, format, fps) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                        values = (file_code, file_name, fpathe, file, file_size, file_createtime, file_duration, file_aspectratio, file_resolution, video_format_name, file_fps,)
-                        if DB_ENGINE == "sqlite": insert_query = insert_query.replace('%s','?')
-                        # logger.debug(f"insert_query: {insert_query} values: {values}")
-                        asyncio.run(cursor.execute(insert_query, values))
-                    if DB_ENGINE == "sqlite": cursor.connection.commit()
-                    else: asyncio.run(cursor.connection.commit())
-        logger.info(f"scan path: {localpath} end")
-    logger.success(f"Folder scan successful! localpaths: {localpaths}")
+                            # 获取视频信息
+                            file_info = get_video_info(file_full)
+                            file_resolution = f"{int(file_info['height'])}p"
+                            file_aspectratio = file_info['aspectratio']
+                            file_duration = file_info['duration']
+                            file_fps = file_info['fps']
+                            if file_resolution == '0p':
+                                logger.error(f"Resolution parsing error: moov atom not found - {file_full}")
+                                continue
+                            if file_aspectratio == 0:
+                                logger.error(f"Aspectratio parsing error: moov atom not found - {file_full}")
+                                continue
+                            if file_duration == 0.0:
+                                logger.error(f"Duration parsing error: Invalid sample size - {file_full}")
+                                continue
+                            if file_fps == 0.0:
+                                logger.error(f"fps parsing error: Invalid fps size - {file_full}")
+                                continue
+                            # 视频时长 转 时分秒
+                            file_hms = duration_to_hms(file_duration)
+                            # logger.debug(f"duration: {file_duration} => hms: {file_hms}")
+
+                            logger.debug(f"code: {file_code} / file: {file_full} / size: {file_size} MB / duration: {file_hms} / resolution: {file_resolution} / fps: {file_fps}")
+
+                            # 使用 ffmpeg 获取视频信息
+                            video_format_name = ""
+                            # try:
+                            #     filepath = os.path.join(fpathe, file)
+                            #     probe = ffmpeg.probe(filepath)
+                            #     video_info = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+                            #     logger.debug(f"video_info: {video_info}")
+                            #     video_format = probe['format']
+                            #     logger.debug(f"video_format: {video_format}")
+                            #     video_format_name = video_format['format_name']
+                            #     logger.debug(f"video_format_name: {video_format_name}")
+                            # except ffmpeg.Error as e:
+                            #     video_format_name = ""
+                            #     logger.error(f"FFmpeg error: {e.stderr.decode()}")
+                            # logger.debug(f"video_format_name: {video_format_name}")
+
+                            update_id = 0
+                            if file_code != "":
+                                # Check if code already exists
+                                check_query = "SELECT id FROM dav_local WHERE path=%s and UPPER(code)=%s and size=%s and duration=%s and status=0"
+                                values = (fpathe, file_code, file_size, file_duration,)
+                                check_query = format_query_for_db(check_query)
+                                logger.debug(f"check_query: {check_query} values: {values}")
+                                await cursor.execute(check_query, values)
+                                exist_code = await cursor.fetchone()
+                                # logger.debug(f"exist_code: {exist_code}")
+                                exist_code = convert_row_to_dict(exist_code, cursor.description)  # 转换字典
+                                logger.debug(f"exist_code: {exist_code}")
+                                update_id = exist_code['id'] if exist_code else 0
+                            
+                            if update_id > 0:
+                                # Update File
+                                update_query = "UPDATE dav_local SET code=%s, name=%s, file=%s WHERE id=%s and status=0"
+                                values = (file_code, file_name, file, update_id,)
+                                update_query = format_query_for_db(update_query)
+                                logger.debug(f"update_query: {update_query} values: {values}")
+                                await cursor.execute(update_query, values)
+                            else:
+                                # Insert File
+                                insert_query = "INSERT INTO dav_local (code, name, path, file, size, created, duration, aspectratio, resolution, format, fps) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                values = (file_code, file_name, fpathe, file, file_size, file_createtime, file_duration, file_aspectratio, file_resolution, video_format_name, file_fps,)
+                                insert_query = format_query_for_db(insert_query)
+                                logger.debug(f"insert_query: {insert_query} values: {values}")
+                                await cursor.execute(insert_query, values)
+                            if DB_ENGINE == "sqlite": cursor.connection.commit()
+                            else: await cursor.connection.commit()
+                logger.info(f"scan path: {localpath} end")
+            logger.success(f"Folder scan successful! localpaths: {localpaths}")
+
+    # 运行异步逻辑
+    return asyncio.run(run_async_scan())
 
 # /api/syncthumbnail 批量生成缩略图
 def sync_generate_thumbnails(local_files):

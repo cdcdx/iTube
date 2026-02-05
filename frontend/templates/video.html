@@ -2,259 +2,157 @@
 {% block content %}
 
 <div class="video-container">
+    <!-- Import Video.js CSS/JS -->
+    <link href="{{ url_for('static', path='css/video-js.css') }}" rel="stylesheet">
     <!-- Import Mediaelement CSS/JS -->
-    <link rel="stylesheet" href="{{ url_for('static', path='css/mediaelementplayer.min.css?v=4.2.16') }}">
+    <link href="{{ url_for('static', path='css/mediaelementplayer.min.css?v=4.2.16') }}" rel="stylesheet">
 
-    <!-- Video Player -->
     <div id="aspectratio-data" style="display:none;">{{ results.videos.aspectratio | tojson }}</div>
-    <div class="text-center" id="videoplayer" title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB" style="flex: 1 1 0%; position: relative; margin: auto; display: flex; justify-content: center; align-items: center;">
-        <video id="iTube-video" controls preload="auto" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">
-            <source src="{{ url_for('stream_and_convert_video', id_name=id, base_name=base) }}" type="video/mp4" />
-            Your browser does not support video playback.
-        </video>
-    </div>
-
-    <!-- Title -->
-    <div style="margin: auto; display: flex; justify-content: space-between; margin-top: 10px;" id="videotitle" tabindex="0">
-        <!--div style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 200px); width: auto; height: 2em;">
-            <h5 class="text-start mb-0" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; width: auto; height: 2em;" title="{{ results.videos.file }}">{{ results.videos.file }}</h5>
-        </div-->
-        <div style="flex: 1; max-width: calc(100% - 142px); width: auto;">
-            <textarea class="form-control" id="videoDescription" style="width: 100%; height: 3.7em; resize: vertical; overflow-y: auto; font-size: 1rem; line-height: 1.4; padding: 8px;" readonly title="{{ results.videos.file }}">{{ results.videos.file }}</textarea>
+    <!-- Video Player -->
+    <div id="player-wrapper" class="player-wrapper">
+        <!-- Video.js -->
+        <div id="player-wrapper-videojs" class="player-wrapper-player" style="display: none;">
+            <div id="player-videojs" class="player-container" 
+                title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB">
+                <video id="video-videojs" class="video-js vjs-default-skin player-video-container" style="width: 100%; height: 100%;" controls preload="auto" data-setup="{}">
+                    <source src="{{ url_for('stream_and_convert_video', id_name=id, base_name=base) }}" type="video/mp4" />
+                    Your browser does not support video playback.
+                </video>
+            </div>
         </div>
-        <div class="video-controls-container" style="width: 138px;">
-            <!-- 评分按钮 -->
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="openScoreModal()" title="评分">
-                {% if results.videos.score != 0 %}
-                    {{ results.videos.score }}
-                {% else %}
-                    <i class="fas fa-star-half-alt"></i>
-                {% endif %}
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="onFileDelete('{{ id }}')" title="删除">
-                <i class="fas fa-trash"></i>
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="onFileCut('{{ id }}')" title="剪切">
-                <i class="fas fa-cut"></i>
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="onFileTranscode('{{ id }}')" title="转码">
-                <i class="fas fa-code"></i>
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="openRenameModal('{{ id }}', '{{ results.videos.base }}')" title="重命名">
-                <i class="fas fa-pen"></i>
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="onFileWebname('{{ id }}')" title="同步网络数据">
-                <i class="fas fa-sync"></i>
-            </button>
-            <button class="btn btn-danger ms-auto small-btn" style="width: 30px; height: 30px; padding: 0; font-size: 0.75rem;" type="button" onclick="openVideoLink('{{ results.videos.code }}')" title="访问地址">
-                <i class="fas fa-unlink"></i>
-            </button>
-        </div>
-    </div>
 
-    <!-- 评分模态窗口 -->
-    <div class="modal fade" id="scoreModal" tabindex="-1" aria-labelledby="scoreModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="scoreModalLabel">评分</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 评分条 -->
-                    <div class="text-center">
-                        <div id="starScore" class="mb-3 d-flex justify-content-center">
-                            <!-- 动态生成星星 -->
-                        </div>
-                        <p><span id="userScore">{{results.videos.score}}</span></p>
-                    </div>
-                    <!-- 评价文本框 -->
-                    <!--
-                    <div class="mt-3">
-                        <textarea class="form-control" id="userComment" rows="3" placeholder="请输入您的评价..." style="width: 100%; resize: vertical;"></textarea>
-                    </div>
-                    -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="submitScore()">提交</button>
-                </div>
+        <!-- MediaElementPlayer -->
+        <div id="player-wrapper-mediaelement" class="player-wrapper-player" style="display: none;">
+            <div id="player-mediaelement" class="player-container" 
+                title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB">
+                <video id="video-mediaelement" class="player-video-container" style="width: 100%; height: 100%;" controls preload="auto">
+                    <source src="{{ url_for('stream_and_convert_video', id_name=id, base_name=base) }}" type="video/mp4" />
+                    Your browser does not support video playback.
+                </video>
             </div>
         </div>
     </div>
 
-    <!-- 重命名模态窗口 -->
-    <div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="renameModalLabel">rename</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <div class="row align-items-center">
-                            <div class="col-1">
-                                <label for="newFilePath" class="form-label mb-0">Path:</label>
-                            </div>
-                            <div class="col-10">
-                                <input type="text" class="form-control" style="width: 700px;" id="newFilePath" placeholder="Path" readonly>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="row align-items-center">
-                            <div class="col-1">
-                                <label for="newFileName" class="form-label mb-0">Name:</label>
-                            </div>
-                            <div class="col-10">
-                                <input type="text" class="form-control" style="width: 700px;" id="newFileName" placeholder="Name">
-                                <div class="invalid-feedback" id="fileNameError">
-                                    illegal chars: \ / : * ? " < > |
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="row align-items-center">
-                            <div class="col-1">
-                                <label for="newFileExt" class="form-label mb-0">Ext:</label>
-                            </div>
-                            <div class="col-10">
-                                <input type="text" class="form-control" style="width: 700px;" id="newFileExt" placeholder="Ext" readonly>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="submitRename()">提交</button>
-                </div>
+    <!-- Title / Star / Button -->
+    <div id="videotitle" class="video-info-container" style="margin: auto; display: flex; justify-content: space-between; margin-top: 10px;" tabindex="0">
+        <div style="flex: 1; max-width: calc(100% - 102px); width: auto;">
+            <textarea class="textarea-control" id="videoDescription" style="width: 100%; margin: auto; border: none;" readonly>{{ results.videos.file }}</textarea>
+        </div>
+        <div class="video-controls-container">
+            <!-- 评分显示 -->
+            <div class="rating-container" style="width: 90px;">
+                <span class="rating-stars" id="rating-stars-{{ results.videos.id }}" data-video-id="{{ results.videos.id }}" data-score="{{ results.videos.score }}" title="Rate">
+                    {% if results.videos.score %}
+                        {% for i in range(1, 6) %}
+                            {% if i <= results.videos.score %} 
+                                <i class="fas fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                            {% elif i == (results.videos.score + 0.5)|int and results.videos.score % 1 != 0 %}
+                                <i class="fas fa-star-half-alt text-warning star-icon" data-value="{{ i }}"></i>
+                            {% else %}
+                                <i class="far fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(1, 6) %}
+                            <i class="far fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                        {% endfor %}
+                    {% endif %}
+                </span>
             </div>
+            <!-- 控制按钮 -->
+            <div style="display: flex; flex-wrap: wrap; gap: 2px;">
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onFileDelete('{{ id }}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onFileCut('{{ id }}')" title="Cut">
+                    <i class="fas fa-cut"></i>
+                </button>
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onFileTranscode('{{ id }}')" title="Transcode">
+                    <i class="fas fa-code"></i>
+                </button>
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onModalRename('{{ id }}', '{{ results.videos.base }}')" title="Rename">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onFileWebname('{{ id }}')" title="SyncData">
+                    <i class="fas fa-sync"></i>
+                </button>
+                <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
+                    onclick="onFileWebLink('{{ results.videos.code }}')" title="Link">
+                    <i class="fas fa-unlink"></i>
+                </button>
+            </div>
+        </div>
+        <!-- 切换 -->
+        <div style="width: 60px; height: 80px; margin-bottom: 2px;">
+            <button class="btn btn-success ms-auto control-btn" type="button" style="width: 100%; height: 100%;"
+                onclick="togglePlayer()" title="Switch">
+                <i class="fas fa-exchange-alt"></i>
+            </button>
         </div>
     </div>
 
     <!-- Pagination -->
-    <div style="height: 44px; justify-content: space-between;">
-        <div style="height: 100%; background-color: var(--body-color); padding: 0 10px 0 10px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; justify-content: space-between;"></div>
-            <div style="margin: auto;">
-                <a href="#" class="btn btn-danger ms-auto" id="btnone"><i class="fas fa-angle-double-left"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btntwo"><i class="fas fa-angle-left"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnthree"></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnfour"><i class="fas fa-angle-right"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnfive"><i class="fas fa-angle-double-right"></i></a>
-            </div>
-            <div style="width: auto;"></div>
+    <div id="page-data" data-current-page="{{ id | default(1) }}" data-total-count="{{ results.count | default(0) }}" style="display: none;"></div>
+    <div class="pagination-container">
+        <div class="pagination-wrapper">
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnone"><i class="fas fa-angle-double-left"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btntwo"><i class="fas fa-angle-left"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnthree"></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnfour"><i class="fas fa-angle-right"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnfive"><i class="fas fa-angle-double-right"></i></a>
         </div>
     </div>
 
-    <!-- JavaScript -->
-    <script src="{{ url_for('static', path='js/base58.js') }}"></script>
+    <!-- Custom JavaScript -->
     <script>
-        // 评分逻辑
-        let currentUserScore = 0;
-        let currentUserComment = "";
-        const maxScore = 5;
-        const minScore = -5;
+        // 更新评分显示
+        function updateRatingDisplay(videoId, newScore) {
+            const ratingElement = document.getElementById(`rating-stars-${videoId}`);
+            if (ratingElement) {
+                let starsHtml = '';
 
-        // 生成评分星星
-        function generateStars() {
-            const starContainer = document.getElementById('starScore');
-            starContainer.innerHTML = '';
-
-            // 生成负分星星 (-5 到 -1)
-            for (let i = minScore; i <= -1; i++) {
-                const starBtn = document.createElement('button');
-                starBtn.className = 'btn star-btn negative';
-                starBtn.innerHTML = '<i class="far fa-star text-danger"></i>';
-                starBtn.title = i + ' 星';
-                starBtn.dataset.score = i;
-                starBtn.onclick = () => selectScore(i);
-                starContainer.appendChild(starBtn);
-            }
-
-            // 生成中性星星 (0)
-            const neutralStar = document.createElement('button');
-            neutralStar.className = 'btn star-btn neutral';
-            neutralStar.innerHTML = '<i class="fas fa-star-half-alt text-warning"></i>';
-            neutralStar.title = '0 星';
-            neutralStar.dataset.score = '0';
-            neutralStar.onclick = () => selectScore(0);
-            starContainer.appendChild(neutralStar);
-
-            // 生成正分星星 (1 到 5)
-            for (let i = 1; i <= maxScore; i++) {
-                const starBtn = document.createElement('button');
-                starBtn.className = 'btn star-btn positive';
-                starBtn.innerHTML = '<i class="far fa-star text-warning"></i>';
-                starBtn.title = i + ' 星';
-                starBtn.dataset.score = i;
-                starBtn.onclick = () => selectScore(i);
-                starContainer.appendChild(starBtn);
-            }
-
-            updateStarDisplay();
-        }
-
-        // 更新星星显示状态
-        function updateStarDisplay() {
-            const stars = document.querySelectorAll('.star-btn');
-            stars.forEach(starBtn => {
-                const score = parseInt(starBtn.dataset.score);
-                const icon = starBtn.querySelector('i');
-
-                // 重置所有星星为默认状态
-                icon.classList.remove('fas', 'far', 'text-warning', 'text-danger', 'text-muted');
-                if (score === 0) {
-                    icon.classList.add('fas', 'fa-star-half-alt');
-                    icon.classList.add(currentUserScore === 0 ? 'text-warning' : 'text-muted');
-                } else {
-                    icon.classList.add('far', 'fa-star');
-                    if (score < 0) {
-                        icon.classList.add(currentUserScore <= score && currentUserScore < 0 ? 'text-danger' : 'text-muted');
+                for (let i = 1; i <= 5; i++) {
+                    if (i <= Math.floor(newScore)) {
+                        // 完整星
+                        starsHtml += `<i class="fas fa-star text-warning star-icon" data-value="${i}"></i>`;
+                    } else if (i == Math.ceil(newScore) && newScore % 1 >= 0.5) {
+                        // 半星
+                        starsHtml += `<i class="fas fa-star-half-alt text-warning star-icon" data-value="${i}"></i>`;
                     } else {
-                        icon.classList.add(currentUserScore >= score && currentUserScore > 0 ? 'text-warning' : 'text-muted');
+                        // 空星
+                        starsHtml += `<i class="far fa-star text-warning star-icon" data-value="${i}"></i>`;
                     }
                 }
-            });
 
-            document.getElementById('userScore').textContent = currentUserScore;
+                ratingElement.innerHTML = starsHtml;
+                ratingElement.setAttribute('data-score', newScore);
+            }
         }
 
-        // 选择评分
-        function selectScore(score) {
-            currentUserScore = score;
-            updateStarDisplay();
-        }
+        // 评分处理
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('star-icon')) {
+                const ratingSpan = e.target.closest('.rating-stars');
+                if (ratingSpan) {
+                    const videoId = ratingSpan.dataset.videoId;
+                    const starValue = parseInt(e.target.dataset.value);
 
-        // 打开评分模态窗口
-        function openScoreModal() {
-            currentUserScore = {{ results.videos.score|tojson }};
+                    // 提交评分
+                    onFileScore(videoId, starValue);
+                }
+            }
+        });
 
-            generateStars();
-            const modal = new bootstrap.Modal(document.getElementById('scoreModal'));
-            modal.show();
-        }
-        // 提交评分
-        function submitScore() {
-            // 这里可以添加提交评分到服务器的逻辑
-            onFileScore('{{ id }}', currentUserScore);
-            // alert('已提交评分: ' + currentUserScore + ' 星');
-            bootstrap.Modal.getInstance(document.getElementById('scoreModal')).hide();
-            results.videos.score = currentUserScore;
-
-            // // 获取评价内容
-            // currentUserComment = document.getElementById('userComment').value;
-            // // 这里可以添加提交评分和评价到服务器的逻辑
-            // alert('已提交评分: ' + currentUserScore + ' 星\n评价: ' + currentUserComment);
-            // bootstrap.Modal.getInstance(document.getElementById('scoreModal')).hide();
-        }
-        
         // 重命名逻辑
         let currentName = 0;
-        // 打开重命名模态窗口
-        function openRenameModal(id, oldbasename) {
+
+        // 打开重命名窗口
+        function onModalRename(id, oldbasename) {
             const oldbaseBytes = Base58.decode(oldbasename);
             const oldname = new TextDecoder().decode(oldbaseBytes);
             currentName = oldname;
@@ -264,7 +162,6 @@
             let filePath = '';
             let fileNameWithExt = oldname;
 
-            // 如果有路径部分
             if (lastSlashIndex !== -1) {
                 filePath = oldname.substring(0, lastSlashIndex);
                 fileNameWithExt = oldname.substring(lastSlashIndex + 1);
@@ -275,10 +172,9 @@
             let fileName = fileNameWithExt;
             let fileExt = '';
 
-            // 如果有扩展名
             if (lastDotIndex !== -1) {
                 fileName = fileNameWithExt.substring(0, lastDotIndex);
-                fileExt = fileNameWithExt.substring(lastDotIndex); // 包含点号
+                fileExt = fileNameWithExt.substring(lastDotIndex);
             }
 
             // 设置模态窗口中的输入框初始值
@@ -290,162 +186,39 @@
             document.getElementById('newFileExt').classList.remove('is-invalid');
 
             // 显示模态窗口
-            const renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
+            const renameModal = new bootstrap.Modal(document.getElementById('customRenameModal'));
             renameModal.show();
         }
-        // 提交重命名
+
+        // 重命名提交
         function submitRename() {
-            // 这里可以添加提交重命名到服务器的逻辑
             onFileRename('{{ id }}', currentName);
-            // alert('已提交重命名: ' + currentName);
-            bootstrap.Modal.getInstance(document.getElementById('renameModal')).hide();
-        }
-
-        async function makeRequest(url, method = 'GET') {
-            try {
-                const response = await fetch(url, { method });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            } catch (error) {
-                console.error('Error:', error.message);
-                throw error;
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('customRenameModal'));
+            if (modalInstance) {
+                modalInstance.hide();
             }
         }
 
-        function onFileDelete(id) {
-            const actionpwd = prompt("请输入密码", "");
-            if (actionpwd) {
-                const baseBytes = new TextEncoder().encode(actionpwd);
-                const baseactionpwd = Base58.encode(baseBytes);
-                const url = `/api/delete/${id}?pwd=${encodeURIComponent(baseactionpwd)}`;
-                makeRequest(url).then(responsecontent => {
-                    if (responsecontent.code === 200) {
-                        populateModal(responsecontent.data);
-                    } else {
-                        populateModal(responsecontent.msg);
-                    }
-                });
-            }
-        }
-        function onFileScore(id, stars) {
-            if (stars) {
-                makeRequest(`/api/score/${id}/${stars}`).then(responsecontent => {
-                    if (responsecontent.code === 200) {
-                        populateModal(responsecontent.data);
-                    } else {
-                        populateModal(responsecontent.msg);
-                    }
-                });
-            }
-        }
-        function onFileCut(id) {
-            const cutsecond = prompt("请输入截取时间", "");
-            if (cutsecond) {
-                makeRequest(`/api/cut/${id}/${cutsecond}`).then(responsecontent => {
-                    if (responsecontent.code === 200) {
-                        populateModal(responsecontent.data);
-                    } else {
-                        populateModal(responsecontent.msg);
-                    }
-                });
-            }
-        }
-        function onFileTranscode(id) {
-            const actionpwd = prompt("请输入密码", "");
-            if (actionpwd) {
-                const baseBytes = new TextEncoder().encode(actionpwd);
-                const baseactionpwd = Base58.encode(baseBytes);
-                const url = `/api/transcode/${id}?pwd=${encodeURIComponent(baseactionpwd)}`;
-                makeRequest(url).then(responsecontent => {
-                    if (responsecontent.code === 200) {
-                        populateModal(responsecontent.data);
-                    } else {
-                        populateModal(responsecontent.msg);
-                    }
-                });
-            }
-        }
-        function onFileRename(id, oldname) {
-            const filePathValue = document.getElementById('newFilePath').value;
-            const fileExtValue = document.getElementById('newFileExt').value.toLowerCase();
-            const newNameValue = document.getElementById('newFileName').value.trim();
-            // 验证文件名
-            if (!newNameValue) {
-                document.getElementById('newFileName').classList.add('is-invalid');
-                return;
-            }
-            // 检查是否包含非法字符
-            const illegalChars = /[\\/:*?"<>|]/;
-            if (illegalChars.test(newNameValue)) {
-                document.getElementById('newFileName').classList.add('is-invalid');
-                return;
-            }
-
-            // 组合完整的新文件名
-            let newFullName = newNameValue + fileExtValue;
-            if (filePathValue) {
-                newFullName = filePathValue + '/' + newFullName;
-            }
-            // 如果文件名没有改变，则不执行重命名操作
-            if (newFullName === oldname) {
-                bootstrap.Modal.getInstance(document.getElementById('renameModal')).hide();
-                return;
-            }
-
-            // 如果验证通过，执行重命名操作
-            const newbaseBytes = new TextEncoder().encode(newFullName);
-            const newbasename = Base58.encode(newbaseBytes);
-            const url = `/api/rename/${id}/${newbasename}`;
-            makeRequest(url).then(responsecontent => {
-                if (responsecontent.code === 200) {
-                    populateModal(responsecontent.data);
-                    // 更新页面上显示的文件名
-                    document.querySelector('#videotitle h5').textContent = newFullName;
-                    document.querySelector('#videotitle h5').title = newFullName;
-                } else {
-                    populateModal(responsecontent.msg);
-                }
-                // 关闭模态窗口
-                bootstrap.Modal.getInstance(document.getElementById('renameModal')).hide();
-            });
-        };
-        function onFileWebname(id) {
-            const thumbnailurl = `/api/thumbnail/${id}`;
-            makeRequest(thumbnailurl).then(responsecontent => {});
-            const url = `/api/webname/${id}`;
-            makeRequest(url).then(responsecontent => {
-                if (responsecontent.code === 200) {
-                    populateModal(responsecontent.data);
-                } else {
-                    populateModal(responsecontent.msg);
-                }
-            });
-        }
-        function openVideoLink(code) {
-            let url;
-
-            if (code && code.toUpperCase().startsWith('FC2-PPV')) {
-                url = `https://123av.com/ja/v/${code}`;
-            } else if (code) {
-                url = `https://javbus.com/${code}`;
-            }
-
-            if (url) {
-                window.open(url, '_blank');
-            } else {
-                alert('没有有效的代码来打开网页链接');
-            }
+        // debounce
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
         }
 
-        // Reset player width and height
+        // Reset size and dimensions
         function resetSize() {
             const aspectratio = JSON.parse(document.getElementById('aspectratio-data').textContent) || 0.5625;
-            const x = document.body.clientWidth - 10;
-            const y = document.body.clientHeight - 120;
-            const xheight = Math.ceil(x * aspectratio) - 10;
-            const ywidth = Math.ceil(y / aspectratio) - 120;
+            const x = document.body.clientWidth - 20;
+            const y = document.body.clientHeight - 160;
+            const xheight = Math.ceil(x * aspectratio);
+            const ywidth = Math.ceil(y / aspectratio);
 
             let width, height;
             if (xheight <= y) {
@@ -455,139 +228,461 @@
                 width = ywidth;
                 height = y;
             }
-            // console.log("width: " + width + " height: " + height)
 
-            const videoPlayer = document.getElementById('videoplayer');
+            // Set wrapper dimensions
+            const playerWrapper = document.getElementById('player-wrapper');
+            if (playerWrapper) {
+                playerWrapper.style.width = width + "px";
+                playerWrapper.style.height = height + "px";
+            }
+
+            // Set individual player dimensions
+            const PlayerVideojs = document.getElementById('player-videojs');
+            if (PlayerVideojs) {
+                PlayerVideojs.style.width = width + "px";
+                PlayerVideojs.style.height = height + "px";
+            }
+
+            const PlayerMediaelement = document.getElementById('player-mediaelement');
+            if (PlayerMediaelement) {
+                PlayerMediaelement.style.width = width + "px";
+                PlayerMediaelement.style.height = height + "px";
+            }
+
             const videoTitle = document.getElementById('videotitle');
-            const iTubeVideo = document.getElementById('iTube-video');
-            videoPlayer.style.width = width + "px";
-            videoPlayer.style.height = height + "px";
-            videoTitle.style.width = width + "px";
-            videoTitle.style.height = "60px";
+            if (videoTitle) {
+                videoTitle.style.width = width + "px";
+                videoTitle.style.height = "82px";
+            }
         }
+
         // Set button links
         function setButtonLinks(currentPage, totalPages) {
             const buttons = ['btnone', 'btntwo', 'btnthree', 'btnfour', 'btnfive'];
             buttons.forEach((id, index) => {
                 const btn = document.getElementById(id);
-                const page = currentPage + index - 2;
-                if (page >= 1 && page <= totalPages) {
-                    btn.href = `/video/${page}`;
-                    btn.hidden = false;
-                } else {
-                    btn.hidden = true;
+                if (btn) {
+                    const page = currentPage + index - 2;
+                    if (page >= 1 && page <= totalPages) {
+                        btn.href = `/video/${page}`;
+                        btn.hidden = false;
+                    } else {
+                        btn.hidden = true;
+                    }
                 }
             });
-            document.getElementById('btnthree').textContent = `${currentPage}`;
+            const btnThree = document.getElementById('btnthree');
+            if (btnThree) {
+                btnThree.textContent = `${currentPage}`;
+            }
         }
-        // Reset size
-        resetSize();
 
         // Get parameters
-        const count = {{ results.count|tojson }};
-        const totalPages = Math.ceil(count);
-        const currentPage = {{ id }};
+        const pageDataElement = document.getElementById('page-data');
+        const totalPages = parseInt(pageDataElement.dataset.totalCount || '0');
+        const currentPage = parseInt(pageDataElement.dataset.currentPage || '1');
         // Set button links
         setButtonLinks(currentPage, totalPages);
 
-        // Listen to window resize event
-        window.addEventListener('resize', resetSize);
-        // Hide buttons
+        // Reset size and dimensions
+        resetSize();
+        const debouncedResize = debounce(resetSize, 250);
+        window.addEventListener('resize', debouncedResize);
+
+        // Hidden button
         document.getElementById('btnclear').hidden = true;
         document.getElementById('btnshow').hidden = true;
         document.getElementById('btnsyncMenu').hidden = true;
         document.getElementById('btnscanMenu').hidden = true;
     </script>
 
-    <!-- Mediaelement JavaScript -->
-{% if mobile %}
-    <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}">
-        // MediaElementPlayer initialization
-        const player = new MediaElementPlayer('iTube-video', {
-            features: ['playpause', 'current', 'progress', 'duration', 'volume', 'fullscreen'],
-            success: function (mediaElement, originalNode) {
+    <!-- Player JavaScript -->
+    <script>
+        let videojsPlayer, mediaelementPlayer;
+        let currentPlayer = getLocalStorage('Player', 'mediaelement');
+
+        // 初始化播放器
+        function initializePlayers() {
+            // 隐藏所有播放器包装器，直到确定要显示哪个播放器
+            const videojsWrapper = document.getElementById('player-wrapper-videojs');
+            const mediaelementWrapper = document.getElementById('player-wrapper-mediaelement');
+            if (videojsWrapper) videojsWrapper.style.display = 'none';
+            if (mediaelementWrapper) mediaelementWrapper.style.display = 'none';
+
+            // 根据当前选择的播放器初始化对应的播放器
+            if (currentPlayer === 'videojs') {
+                initVideoJSPlayer(); // 初始化videojs
+            } else {
+                initMediaElementPlayer(); // 初始化MediaElementPlayer
             }
-        });
-        // Listen to focus event
-        document.addEventListener('focusin', function (event) {
-            const playerContainer = document.getElementById('videoplayer');
-            if (playerContainer.contains(event.target)) {
-                document.getElementById('videotitle').focus();
+
+            // 显示正确的播放器
+            switchPlayer(currentPlayer, false);
+        }
+
+        // 初始化MediaElement播放器
+        function initMediaElementPlayer() {
+            // 如果已经初始化则返回
+            if (mediaelementPlayer) return;
+
+            const videoElement = document.getElementById('video-mediaelement');
+            if (!videoElement) return;
+
+            // 检查mediaelement是否已经在初始化过程中或者已经存在实例
+            if (videoElement.player) {
+                mediaelementPlayer = videoElement.player;
+                return;
             }
-        });
-        // Listen to keyboard event
-        document.addEventListener('keydown', function (event) {
-            switch (event.key) {
-                case 'ArrowRight': // Fast forward 10s
-                    player.setCurrentTime(player.currentTime + 10);
-                    break;
-                case 'ArrowLeft': // Rewind 10s
-                    player.setCurrentTime(Math.max(player.currentTime - 10, 0));
-                    break;
-                case 'ArrowUp': // Increase volume by 10%
-                    player.setVolume(Math.min(player.volume + 0.1, 1));
-                    break;
-                case 'ArrowDown': // Decrease volume by 10%
-                    player.setVolume(Math.max(player.volume - 0.1, 0));
-                    break;
-                case ' ': // Space key to play/pause
-                    if (player.paused) {
-                        player.play().catch(error => console.error('Play failed:', error));
-                    } else {
-                        player.pause();
+
+            // 初始化mediaelement
+            mediaelementPlayer = new MediaElementPlayer(videoElement, {
+                features: [
+                    'playpause',
+                    'current',
+                    'progress',
+                    'duration',
+                    'volume',
+                    'fullscreen'
+                ],
+                success: function (mediaElement, originalNode) {
+                    console.log('mediaelement player initialized');
+                },
+                error: function (mediaElement, error) {
+                    console.log('mediaelement error:', error);
+                }
+            });
+
+            // Listen to focus event
+            document.addEventListener('focusin', function (event) {
+                const playerContainer = document.getElementById('player-mediaelement');
+                if (playerContainer && playerContainer.contains(event.target)) {
+                    const titleElement = document.getElementById('videotitle');
+                    if (titleElement) {
+                        titleElement.focus();
                     }
-                    break;
-                default:
-                    // console.log('Key pressed: ', event.key);
-                    return;
+                }
+            });
+        }
+
+        // 初始化Video.js播放器
+        function initVideoJSPlayer() {
+            // 如果已经初始化则返回
+            if (videojsPlayer) return;
+
+            const videoElement = document.getElementById('video-videojs');
+            if (!videoElement) return;
+
+            // 检查videojs是否已经在初始化过程中或者已经存在实例
+            if (videoElement.player) {
+                videojsPlayer = videoElement.player;
+                return;
             }
+
+            // 添加加载指示器
+            const container = document.getElementById('player-videojs');
+            const loader = document.createElement('div');
+            loader.className = 'player-loader';
+            loader.innerHTML = '<div class="spinner-border text-light" role="status"><span class="visually-hidden">Loading...</span></div>';
+            container.appendChild(loader);
+
+            // 初始化Video.js
+            videojsPlayer = videojs('video-videojs', {
+                fluid: true,
+                responsive: true,
+                fill: true,
+                controls: true,
+                autoplay: false,
+                preload: 'metadata',
+                playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
+                controlBar: {
+                    children: [
+                        'playToggle',
+                        'volumePanel',
+                        'currentTimeDisplay',
+                        'timeDivider',
+                        'durationDisplay',
+                        'progressControl',
+                        'playbackRateMenuButton',
+                        'fullscreenToggle'
+                    ]
+                }
+            });
+
+            // 播放器准备就绪后移除加载指示器
+            videojsPlayer.ready(function () {
+                if (loader.parentNode) {
+                    loader.parentNode.removeChild(loader);
+                }
+                console.log('videojs player initialized');
+            });
+        }
+
+        // 播放器切换函数
+        function switchPlayer(targetPlayer, shouldSyncState = true) {
+            let syncData = null;
+
+            // 仅在需要同步状态时获取当前播放状态
+            if (shouldSyncState) {
+                if (currentPlayer === 'mediaelement' && mediaelementPlayer) {
+                    // 获取当前播放器状态
+                    syncData = {
+                        currentTime: mediaelementPlayer.media.currentTime || 0,
+                        volume: mediaelementPlayer.media.volume || 1,
+                        paused: mediaelementPlayer.media.paused
+                    };
+
+                    // 暂停当前播放器
+                    mediaelementPlayer.media.pause();
+                } else if (currentPlayer === 'videojs' && videojsPlayer) {
+                    // 获取当前播放器状态
+                    syncData = {
+                        currentTime: videojsPlayer.currentTime() || 0,
+                        volume: videojsPlayer.volume() || 1,
+                        paused: videojsPlayer.paused()
+                    };
+
+                    // 暂停当前播放器
+                    videojsPlayer.pause();
+                }
+            }
+
+            // 切换显示的播放器包装器
+            const videojsWrapper = document.getElementById('player-wrapper-videojs');
+            const mediaelementWrapper = document.getElementById('player-wrapper-mediaelement');
+            // 隐藏所有播放器
+            if (videojsWrapper) videojsWrapper.style.display = 'none';
+            if (mediaelementWrapper) mediaelementWrapper.style.display = 'none';
+
+            if (targetPlayer === 'videojs') {
+                // 显示Video.js
+                if (videojsWrapper) {
+                    videojsWrapper.style.display = 'block';
+
+                    // 确保Video.js播放器已初始化
+                    if (!videojsPlayer) {
+                        initVideoJSPlayer();
+                    }
+
+                    // 状态同步
+                    if (syncData) {
+                        // 等待播放器就绪后同步状态
+                        if (videojsPlayer) {
+                            videojsPlayer.ready(() => {
+                                videojsPlayer.currentTime(syncData.currentTime);
+                                videojsPlayer.volume(syncData.volume);
+
+                                // 如果原播放器不是暂停的，则开始播放
+                                if (!syncData.paused) {
+                                    videojsPlayer.play().catch(error => console.log('Play after switch failed:', error));
+                                }
+                            });
+                        }
+                    }
+                }
+            } else {
+                // 显示MediaElement
+                if (mediaelementWrapper) {
+                    mediaelementWrapper.style.display = 'block';
+
+                    // 确保MediaElement播放器已初始化
+                    if (!mediaelementPlayer) {
+                        initMediaElementPlayer();
+                    }
+
+                    // 状态同步
+                    if (syncData && mediaelementPlayer && mediaelementPlayer.media) {
+                        // 等待MediaElement准备就绪
+                        mediaelementPlayer.media.currentTime = syncData.currentTime;
+                        mediaelementPlayer.media.volume = syncData.volume;
+
+                        // 如果原播放器不是暂停的，则开始播放
+                        if (!syncData.paused) {
+                            mediaelementPlayer.media.play();
+                        }
+                    }
+                }
+            }
+
+            // 更新当前播放器标识
+            currentPlayer = targetPlayer;
+        }
+
+        // 切换播放器
+        function togglePlayer() {
+            const newPlayer = currentPlayer === 'mediaelement' ? 'videojs' : 'mediaelement';
+            switchPlayer(newPlayer, true);
+
+            // 保存用户首选的播放器
+            updateLocalStorage('Player', newPlayer);
+        }
+
+        // 键盘控制函数
+        function setupKeyboardControls() {
+            document.addEventListener('keydown', function (event) {
+                // 检查事件目标是否是输入元素
+                const isInputElement =
+                    event.target.tagName === 'INPUT' ||
+                    event.target.tagName === 'TEXTAREA' ||
+                    event.target.contentEditable === 'true' ||
+                    event.target.isContentEditable;
+
+                // 如果焦点在输入元素上，直接返回，不执行播放器控制
+                if (isInputElement) {
+                    return;
+                }
+
+                // 快捷键切换播放器 (P key)
+                if (event.key === 'p' || event.key === 'P') {
+                    togglePlayer();
+                    event.preventDefault();
+                    return;
+                }
+
+                // 获取当前活动的播放器
+                let activePlayer = getActivePlayer();
+                if (!activePlayer) return;
+
+                // 根据当前播放器类型执行相应的控制操作
+                switch (event.key) {
+                    case 'ArrowRight': // 快进 10s
+                        skipTime(activePlayer, currentPlayer, 10);
+                        event.preventDefault();
+                        break;
+                    case 'ArrowLeft': // 快退 10s
+                        skipTime(activePlayer, currentPlayer, -10);
+                        event.preventDefault();
+                        break;
+                    case 'ArrowUp': // 增加音量 10%
+                        adjustVolume(activePlayer, currentPlayer, 0.1);
+                        event.preventDefault();
+                        break;
+                    case 'ArrowDown': // 减少音量 10%
+                        adjustVolume(activePlayer, currentPlayer, -0.1);
+                        event.preventDefault();
+                        break;
+                    case ' ': // 空格键播放/暂停
+                        togglePlayback(activePlayer, currentPlayer);
+                        event.preventDefault();
+                        break;
+                    case 'm': // Mute toggle
+                    case 'M':
+                        toggleMute(activePlayer, currentPlayer);
+                        event.preventDefault();
+                        break;
+                    case 'f': // Fullscreen toggle
+                    case 'F':
+                        toggleFullscreen(activePlayer, currentPlayer);
+                        event.preventDefault();
+                        break;
+                    default:
+                        return;
+                }
+            });
+        }
+
+        // 获取当前活跃的播放器
+        function getActivePlayer() {
+            if (currentPlayer === 'videojs' && videojsPlayer) {
+                return videojsPlayer;
+            } else if (currentPlayer === 'mediaelement' && mediaelementPlayer && mediaelementPlayer.media) {
+                return mediaelementPlayer.media;
+            }
+            return null;
+        }
+
+        // 跳转时间函数
+        function skipTime(player, playerType, seconds) {
+            if (playerType === 'videojs') {
+                // Video.js player
+                if (player.duration()) {
+                    const newTime = Math.max(0, Math.min(player.duration(), player.currentTime() + seconds));
+                    player.currentTime(newTime);
+                }
+            } else if (playerType === 'mediaelement') {
+                // MediaElement player
+                if (player.duration) {
+                    const newTime = Math.max(0, Math.min(player.duration, player.currentTime + seconds));
+                    player.currentTime = newTime;
+                }
+            }
+        }
+
+        // 调整音量函数
+        function adjustVolume(player, playerType, delta) {
+            if (playerType === 'videojs') {
+                // Video.js player
+                const newVolume = Math.max(0, Math.min(1, player.volume() + delta));
+                player.volume(newVolume);
+            } else if (playerType === 'mediaelement') {
+                // MediaElement player
+                const newVolume = Math.max(0, Math.min(1, player.volume + delta));
+                player.volume = newVolume;
+            }
+        }
+
+        // 播放/暂停切换函数
+        function togglePlayback(player, playerType) {
+            if (playerType === 'videojs') {
+                // Video.js player
+                if (player.paused()) {
+                    player.play().catch(error => console.error('Play failed:', error));
+                } else {
+                    player.pause();
+                }
+            } else if (playerType === 'mediaelement') {
+                // MediaElement player
+                if (player.paused) {
+                    player.play();
+                } else {
+                    player.pause();
+                }
+            }
+        }
+
+        // 静音切换函数
+        function toggleMute(player, playerType) {
+            if (playerType === 'videojs') {
+                // Video.js player
+                player.muted(!player.muted());
+            } else if (playerType === 'mediaelement') {
+                // MediaElement player
+                player.muted = !player.muted;
+            }
+        }
+
+        // 全屏切换函数
+        function toggleFullscreen(player, playerType) {
+            if (playerType === 'videojs') {
+                player.requestFullscreen();
+            } else if (playerType === 'mediaelement') {
+                if (typeof player.enterFullScreen === 'function') {
+                    player.enterFullScreen();
+                } else if (typeof player.webkitEnterFullscreen === 'function') {
+                    player.webkitEnterFullscreen();
+                } else if (typeof player.msRequestFullscreen === 'function') {
+                    player.msRequestFullscreen();
+                } else {
+                    // fallback to native fullscreen API
+                    if (player.requestFullscreen) {
+                        player.requestFullscreen();
+                    } else if (player.webkitRequestFullscreen) {
+                        player.webkitRequestFullscreen();
+                    } else if (player.msRequestFullscreen) {
+                        player.msRequestFullscreen();
+                    }
+                }
+            }
+        }
+
+        // Page load initialization
+        document.addEventListener('DOMContentLoaded', function () {
+            // 初始化播放器
+            initializePlayers();
+
+            // 设置键盘控制
+            setupKeyboardControls();
         });
     </script>
-{% else %}
-    <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}"></script>
-    <script> // PC
-        // MediaElementPlayer initialization
-        const player = new MediaElementPlayer('iTube-video', {
-            features: ['playpause', 'current', 'progress', 'duration', 'volume', 'fullscreen'],
-            success: function (mediaElement, originalNode) {
-            }
-        });
-        // Listen to focus event
-        document.addEventListener('focusin', function (event) {
-            const playerContainer = document.getElementById('videoplayer');
-            if (playerContainer.contains(event.target)) {
-                document.getElementById('videotitle').focus();
-            }
-        });
-        // Listen to keyboard event
-        document.addEventListener('keydown', function (event) {
-            switch (event.key) {
-                case 'ArrowRight': // Fast forward 10s
-                    player.setCurrentTime(player.currentTime + 10);
-                    break;
-                case 'ArrowLeft': // Rewind 10s
-                    player.setCurrentTime(Math.max(player.currentTime - 10, 0));
-                    break;
-                case 'ArrowUp': // Increase volume by 10%
-                    player.setVolume(Math.min(player.volume + 0.1, 1));
-                    break;
-                case 'ArrowDown': // Decrease volume by 10%
-                    player.setVolume(Math.max(player.volume - 0.1, 0));
-                    break;
-                case ' ': // Space key to play/pause
-                    if (player.paused) {
-                        player.play().catch(error => console.error('Play failed:', error));
-                    } else {
-                        player.pause();
-                    }
-                    break;
-                default:
-                    // console.log('Key pressed: ', event.key);
-                    return;
-            }
-        });
-    </script>
-{% endif %}
 </div>
 
 {% endblock %}

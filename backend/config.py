@@ -33,10 +33,21 @@ else:
     load_dotenv(find_dotenv('.env'))
 
 
+# ## CRYPTO-KEY
+# if os.getenv("KEY") is None:
+#     print("ERROR: 'KEY' is not set in the .env file")
+#     sys.exit()
+# else:
+#     KEY = os.getenv("KEY")
+#     KEY = KEY if KEY.endswith("=") else KEY + "="
+#     FNet = Fernet(KEY)
+
+
 # APP
 APP_TITLE = os.getenv('APP_TITLE', default='iTube')
 APP_PAGE_LIMIT = int(os.getenv('APP_PAGE_LIMIT', default=12))
 APP_ACTION_PASSWD = os.getenv('APP_ACTION_PASSWD', default='123456')
+
 
 # FastAPI
 FASTAPI_API_PATH: str = '/api'
@@ -65,7 +76,7 @@ BASIC_PASSWORD = os.getenv('BASIC_PASSWORD', default='admin')
 DB_ENGINE = os.getenv('DB_ENGINE', default='sqlite')
 SQLITE_URL = os.getenv('SQLITE_URL', default='dav_db.sqlite')
 MYSQL_URL = os.getenv('MYSQL_URL', default='')
-MYSQL_MAXCONNECT = int(os.getenv('MYSQL_MAXCONNECT', default=100))
+DB_MAXCONNECT = int(os.getenv('DB_MAXCONNECT', default=100))
 
 # REDIS配置
 REDIS_MODE = os.getenv('REDIS_MODE', default='standalone')
@@ -92,6 +103,7 @@ PATH_FILTER_LIST = get_envsion('PATH_FILTER_LIST')
 # THUMBNAIL
 THUMBNAIL_TIME = int(os.getenv('THUMBNAIL_TIME', default=30))
 THUMBNAIL_COMPRESSION = int(os.getenv('THUMBNAIL_COMPRESSION', default=1))
+THUMBNAIL_CLEAR = bool(os.getenv('THUMBNAIL_CLEAR', 'False') == 'True')
 
 # TEMP_PATH
 TEMP_PATH = os.getenv("TEMP_PATH", default="./.temp")  # os.path.join(os.path.dirname(os.path.dirname(__file__)), "./.temp"))

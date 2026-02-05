@@ -3,59 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <title>{% if title and title|length > 0 %}{{ title }}{% else %}{{ apptitle }}{% endif %}</title>
-    <!-- 本地 CSS -->
+    <script>
+        // 黑暗模式防止闪烁
+        (function() {
+            const isDark = localStorage.getItem('isBlack') === 'true';
+            if (isDark) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+        // storage
+        function getLocalStorage(key, defaultValue) {
+            if (typeof (Storage) === "undefined") {
+                return defaultValue;
+            }
+            const stored = localStorage.getItem(key);
+            if (stored === null) {
+                return defaultValue;
+            }
+            // 解析JSON
+            try {
+                return JSON.parse(stored);
+            } catch (e) {
+                // 对于简单的字符串值，直接返回
+                return stored;
+            }
+        }
+    </script>
+    <!-- local CSS -->
     <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css?v=5.3.3') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='css/all.min.css?v=5.15.1') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
     <script>
-        async function makeRequest(url, method = 'GET') {
+        // ----------------------------------- storage -----------------------------------
+
+        function getLocalStorage(key, defaultValue) {
+            if (typeof (Storage) === "undefined") {
+                return defaultValue;
+            }
+            const stored = localStorage.getItem(key);
+            if (stored === null) {
+                return defaultValue;
+            }
+            // 解析JSON
             try {
-                const response = await fetch(url, { method });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            } catch (error) {
-                console.error('Error:', error.message);
-                throw error;
+                return JSON.parse(stored);
+            } catch (e) {
+                // 对于简单的字符串值，直接返回
+                return stored;
             }
         }
 
-        function onClearDB() {
-            const actionpwd = prompt("请输入密码", "");
-            if (actionpwd) {
-                const baseBytes = new TextEncoder().encode(actionpwd);
-                const baseactionpwd = Base58.encode(baseBytes);
-                const url = `/api/cleardb?pwd=${encodeURIComponent(baseactionpwd)}`;
-                makeRequest(url).then(responsecontent => {
-                    if (responsecontent.code === 200) {
-                        populateModal(responsecontent.data);
-                        location.reload();  // F5刷新
-                    } else {
-                        populateModal(responsecontent.msg);
-                    }
-                });
+        function updateLocalStorage(key, value) {
+            if (typeof (Storage) === "undefined") {
+                return;
             }
-        }
-        function onScanDisk(path) {
-            const url = path ? `/api/scan?path=${encodeURIComponent(path)}` : "/api/scan";
-            makeRequest(url).then(responsecontent => {
-                if (responsecontent.code === 200) {
-                    populateModal(responsecontent.data);
-                } else {
-                    populateModal(responsecontent.msg);
-                }
-            });
-        }
-        function onSyncThumbnail(path) {
-            const url = path ? `/api/syncthumbnail?path=${encodeURIComponent(path)}` : "/api/syncthumbnail";
-            makeRequest(url).then(responsecontent => {
-                if (responsecontent.code === 200) {
-                    populateModal(responsecontent.data);
-                } else {
-                    populateModal(responsecontent.msg);
-                }
-            });
+            const serializedValue = typeof value === 'object' ? JSON.stringify(value) : value;
+            localStorage.setItem(key, serializedValue);
         }
 
         function onShowThumbnail() {
@@ -63,11 +66,7 @@
             updateLocalStorage('isShow', isShow);
             setShowThumbnail();
         }
-        function onBlackMode() {
-            const isBlack = !getLocalStorage('isBlack', false);
-            updateLocalStorage('isBlack', isBlack);
-            setBlackMode();
-        }
+
         function setShowThumbnail() {
             const isShow = getLocalStorage('isShow', false);
             const defaultImageUrl = '/frontend/static/images/video.png';
@@ -79,14 +78,69 @@
                 img.src = isShow ? img.getAttribute('data-src') : defaultImageUrl;
             });
         }
+
+        function onBlackMode() {
+            const isBlack = !getLocalStorage('isBlack', false);
+            updateLocalStorage('isBlack', isBlack);
+            setBlackMode();
+            
+            // 更新按钮图标
+            const themeToggleBtn = document.querySelector('[title="Dark Mode"]');
+            if (themeToggleBtn) {
+                const icon = themeToggleBtn.querySelector('i');
+                if (icon) {
+                    if (isBlack) {
+                        icon.className = 'fas fa-moon';
+                    } else {
+                        icon.className = 'fas fa-sun';
+                    }
+                }
+            }
+        }
+
         function setBlackMode() {
             const isBlack = getLocalStorage('isBlack', false);
-            document.documentElement.style.setProperty('--body-color', isBlack ? 'black' : '#f8f9fa');
-            document.documentElement.style.setProperty('--bs-btn-bg', isBlack ? 'black' : '#dc3545');
-            document.documentElement.style.setProperty('--bs-btn-border-color', isBlack ? 'black' : '#dc3545');
-            document.documentElement.style.setProperty('--primary-color', isBlack ? 'black' : '#dc3545');
-            document.documentElement.style.setProperty('--text-color', isBlack ? 'var(--light-color)' : 'black');
+            // 使用 class 和 data attribute 来控制主题
+            if (isBlack) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.body.classList.add('dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                document.body.classList.remove('dark');
+            }
+            
+            // 更新所有需要根据主题变化的元素
+            updateThemeDependentElements(isBlack);
         }
+
+        function updateThemeDependentElements(isBlack) {
+            // 更新textarea的背景色
+            const videoDescriptions = document.querySelectorAll('#videoDescription, textarea.textarea-control');
+            videoDescriptions.forEach(desc => {
+                if (isBlack) {
+                    desc.classList.remove('bg-light', 'text-dark');
+                    desc.classList.add('bg-black', 'text-light');
+                } else {
+                    desc.classList.remove('bg-black', 'text-light');
+                    desc.classList.add('bg-light', 'text-dark');
+                }
+            });
+            
+            // 更新模态框样式
+            const modals = document.querySelectorAll('.modal-content');
+            modals.forEach(modal => {
+                if (isBlack) {
+                    modal.classList.add('bg-dark', 'text-light');
+                    modal.classList.remove('bg-light', 'text-dark');
+                } else {
+                    modal.classList.add('bg-light', 'text-dark');
+                    modal.classList.remove('bg-dark', 'text-light');
+                }
+            });
+        }
+
+        // ----------------------------------- populate -----------------------------------
+
         function createDropdownItem(parent, text, config) {
             const li = document.createElement('li');
             const a = document.createElement('a');
@@ -94,7 +148,6 @@
             a.href = config.href || '#';
             a.textContent = text;
             a.onclick = config.onClick || (() => {});
-            // 如果有额外的属性需要设置
             if (config.attributes) {
                 for (const [key, value] of Object.entries(config.attributes)) {
                     a.setAttribute(key, value);
@@ -103,6 +156,7 @@
             li.appendChild(a);
             parent.appendChild(li);
         }
+
         function populateScanPathsDropdown() {
             const pathsData = document.getElementById('scan-paths-data').textContent;
             const b58paths = JSON.parse(pathsData);
@@ -117,9 +171,9 @@
                 createDropdownItem(dropdown, path.text, { onClick: () => onScanDisk(path.value) });
             });
         }
+
         function populateSyncPathsDropdown() {
             const pathsData = document.getElementById('sync-paths-data').textContent;
-            
             const b58paths = JSON.parse(pathsData);
             const paths = b58paths.map(b58path => {
                 const pathBytes = Base58.decode(b58path);
@@ -132,6 +186,7 @@
                 createDropdownItem(dropdown, path.text, { onClick: () => onSyncThumbnail(path.value) });
             });
         }
+
         function populateKeysDropdown() {
             const keysData = document.getElementById('keys-data').textContent;
             const skeys = JSON.parse(keysData);
@@ -139,7 +194,6 @@
             const columns = Array.from({ length: numColumns }, () => document.createElement('div'));
             columns.forEach(column => column.className = 'col');
 
-            // 计算列数，每列最多30个
             skeys.forEach((key, index) => {
                 const column = columns[index % numColumns];
                 createDropdownItem(column, key, {
@@ -151,7 +205,6 @@
                 });
             });
 
-            // 创建行并添加多列
             const row = document.createElement('div');
             row.className = 'row';
             columns.forEach(column => row.appendChild(column));
@@ -160,34 +213,248 @@
             dropdown.innerHTML = '';
             dropdown.appendChild(row);
         }
-        function populateModal(message) {
-            const modalMessage = document.getElementById('customAlertMessage');
-            const modal = new bootstrap.Modal(document.getElementById('customAlertModal'));
-            modalMessage.innerText = message;
-            modal.show();
 
-            let countdown = 5;
-            const countdownElement = document.getElementById('customAlertButton');
+        // 打开警告窗口
+        function onModalAlert(message) {
+            const modalMessage = document.getElementById('alertMessage');
+            modalMessage.innerText = message;
+            // 显示模态窗口
+            const alertModal = new bootstrap.Modal(document.getElementById('customAlertModal'));
+            alertModal.show();
+            // 按钮倒计时
+            let countdown = 3;
+            const countdownElement = document.getElementById('alertButton');
             const countdownInterval = setInterval(() => {
                 countdown--;
-                countdownElement.innerText = `${countdown}`;
+                countdownElement.innerText = countdown > 0 ? `${countdown}` : 'OK';
                 if (countdown <= 0) {
                     clearInterval(countdownInterval);
-                    modal.hide();
-                    countdownElement.innerText = 5;
+                    alertModal.hide();
+                    countdownElement.innerText = 'OK';
                 }
             }, 1000);
         }
-        function updateLocalStorage(key, value) {
-            localStorage.setItem(key, value);
+
+        // ----------------------------------- network -----------------------------------
+
+        async function makeRequest(url, method = 'GET') {
+            try {
+                const response = await fetch(url, { method });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            } catch (error) {
+                console.error('Error:', error.message);
+                throw error;
+            }
         }
-        function getLocalStorage(key, defaultValue) {
-            return JSON.parse(localStorage.getItem(key)) || defaultValue;
+
+        function onFileScore(id, stars) {
+            if (stars !== undefined) {
+                makeRequest(`/api/score/${id}/${stars}`).then(responsecontent => {
+                        if (responsecontent.code === 200) {
+                            // 更新当前页面的评分显示
+                            updateRatingDisplay(id, stars);
+                        } else {
+                            // 显示错误信息
+                            onModalAlert(responsecontent.msg);
+                        }
+                    });
+            }
+        }
+
+        function onClearDB() {
+            const actionpwd = prompt("请输入密码", "");
+            if (actionpwd) {
+                const baseBytes = new TextEncoder().encode(actionpwd);
+                const baseactionpwd = Base58.encode(baseBytes);
+                const url = `/api/cleardb?pwd=${encodeURIComponent(baseactionpwd)}`;
+                makeRequest(url).then(responsecontent => {
+                    if (responsecontent.code === 200) {
+                        onModalAlert(responsecontent.data);
+                        location.reload();  // F5刷新
+                    } else {
+                        onModalAlert(responsecontent.msg);
+                    }
+                });
+            }
+        }
+
+        function onScanDisk(path) {
+            const url = path ? `/api/scan?path=${encodeURIComponent(path)}` : "/api/scan";
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    onModalAlert(responsecontent.data);
+                } else {
+                    onModalAlert(responsecontent.msg);
+                }
+            });
+        }
+
+        function onSyncThumbnail(path) {
+            const url = path ? `/api/syncthumbnail?path=${encodeURIComponent(path)}` : "/api/syncthumbnail";
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    onModalAlert(responsecontent.data);
+                } else {
+                    onModalAlert(responsecontent.msg);
+                }
+            });
+        }
+
+        // ---------------------------------- video ----------------------------------
+
+        function onFileDelete(id) {
+            const actionpwd = prompt("请输入密码", "");
+            if (actionpwd) {
+                const baseBytes = new TextEncoder().encode(actionpwd);
+                const baseactionpwd = Base58.encode(baseBytes);
+                const url = `/api/delete/${id}?pwd=${encodeURIComponent(baseactionpwd)}`;
+                makeRequest(url).then(responsecontent => {
+                    if (responsecontent.code === 200) {
+                        onModalAlert(responsecontent.data);
+                    } else {
+                        onModalAlert(responsecontent.msg);
+                    }
+                });
+            }
+        }
+
+        function onFileCut(id) {
+            const cutsecond = prompt("请输入截取时间", "");
+            if (cutsecond) {
+                makeRequest(`/api/cut/${id}/${cutsecond}`).then(responsecontent => {
+                    if (responsecontent.code === 200) {
+                        onModalAlert(responsecontent.data);
+                    } else {
+                        onModalAlert(responsecontent.msg);
+                    }
+                });
+            }
+        }
+
+        function onFileTranscode(id) {
+            const actionpwd = prompt("请输入密码", "");
+            if (actionpwd) {
+                const baseBytes = new TextEncoder().encode(actionpwd);
+                const baseactionpwd = Base58.encode(baseBytes);
+                const url = `/api/transcode/${id}?pwd=${encodeURIComponent(baseactionpwd)}`;
+                makeRequest(url).then(responsecontent => {
+                    if (responsecontent.code === 200) {
+                        onModalAlert(responsecontent.data);
+                    } else {
+                        onModalAlert(responsecontent.msg);
+                    }
+                });
+            }
+        }
+
+        function onFileRename(id, oldname) {
+            const filePathValue = document.getElementById('newFilePath').value;
+            const fileExtValue = document.getElementById('newFileExt').value.toLowerCase();
+            const newNameValue = document.getElementById('newFileName').value.trim();
+
+            // 验证文件名
+            if (!newNameValue) {
+                document.getElementById('newFileName').classList.add('is-invalid');
+                return;
+            }
+
+            // 检查是否包含非法字符
+            const illegalChars = /[\\/:*?"<>|]/;
+            if (illegalChars.test(newNameValue)) {
+                document.getElementById('newFileName').classList.add('is-invalid');
+                return;
+            }
+
+            // 组合完整的新文件名
+            let newFullName = newNameValue + fileExtValue;
+            if (filePathValue) {
+                newFullName = filePathValue + '/' + newFullName;
+            }
+
+            // 如果文件名没有改变，则不执行重命名操作
+            if (newFullName === oldname) {
+                bootstrap.Modal.getInstance(document.getElementById('customRenameModal')).hide();
+                return;
+            }
+
+            // 如果验证通过，执行重命名操作
+            const newbaseBytes = new TextEncoder().encode(newFullName);
+            const newbasename = Base58.encode(newbaseBytes);
+            const url = `/api/rename/${id}/${newbasename}`;
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    onModalAlert(responsecontent.data);
+                    // 更新页面上显示的文件名
+                    document.querySelector('#videotitle h5').textContent = newFullName;
+                    document.querySelector('#videotitle h5').title = newFullName;
+                } else {
+                    onModalAlert(responsecontent.msg);
+                }
+                // 关闭模态窗口
+                bootstrap.Modal.getInstance(document.getElementById('customRenameModal')).hide();
+            });
+        }
+
+        function onFileWebname(id) {
+            const thumbnailurl = `/api/thumbnail/${id}`;
+            makeRequest(thumbnailurl).then(responsecontent => { });
+            const url = `/api/webname/${id}`;
+            makeRequest(url).then(responsecontent => {
+                if (responsecontent.code === 200) {
+                    onModalAlert(responsecontent.data);
+                } else {
+                    onModalAlert(responsecontent.msg);
+                }
+            });
+        }
+
+        function onFileWebLink(code) {
+            let url;
+
+            if (code && code.toUpperCase().startsWith('FC2-PPV')) {
+                url = `https://123av.com/ja/v/${code}`;
+            } else if (code) {
+                url = `https://javbus.com/${code}`;
+            }
+
+            if (url) {
+                window.open(url, '_blank');
+            }
         }
 
         window.onload = function () {
-            setShowThumbnail();
+            // 初始化主题
             setBlackMode();
+            
+            // 更新按钮图标
+            const isBlack = getLocalStorage('isBlack', false);
+
+            // 直接在 body 上添加主题类，而不是修改 CSS 变量
+            if (isBlack) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.body.classList.add('dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                document.body.classList.remove('dark');
+            }
+
+            // 更新黑暗模式图标
+            const themeToggleBtn = document.querySelector('[title="Dark Mode"]');
+            if (themeToggleBtn) {
+                const icon = themeToggleBtn.querySelector('i');
+                if (icon) {
+                    if (isBlack) {
+                        icon.className = 'fas fa-moon';
+                    } else {
+                        icon.className = 'fas fa-sun';
+                    }
+                }
+            }
+            
+            setShowThumbnail();
             populateScanPathsDropdown();
             populateSyncPathsDropdown();
             populateKeysDropdown();
@@ -199,11 +466,8 @@
         <!-- Navigation Bar -->
         <nav id="navbar">
             <div class="navbar-container">
-                <div id="navbarSupportedContent" style="height: 100%;background-color: var(--primary-color);padding: 0 10px 0 10px;display: flex;align-items: center;justify-content: space-between;">
+                <div id="navbarSupportedContent" style="height: 100%; background-color: var(--primary-color);padding: 0 10px 0 10px; display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex;justify-content: space-between;">
-                        <button class="btn btn-danger ms-auto" type="button" style="margin-right: 10px;" data-bs-toggle="offcanvas" data-bs-target="#favoritesOffcanvas" aria-controls="favoritesOffcanvas">
-                            <i class="fas fa-star"></i>
-                        </button>
                         <a class="navbar-brand d-flex align-items-center" href="{{ url_for('read_root') }}">
                             <span class="ms-2 text-white">{{ apptitle }}</span>
                         </a>
@@ -212,41 +476,38 @@
                         <form method="get" role="search" action="/" style="width: auto; display: flex;">
                             <input type="text" name="query" class="form-control me-2" placeholder="" value="{{ query or '' }}">
                             <button class="btn btn-danger ms-auto" type="submit" style="margin-right: 6px;">Search</button>
-                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnkeyMenu" data-bs-toggle="dropdown" title="关键字" aria-expanded="false">
+                            <!-- 搜索下拉菜单 -->
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnkeyMenu" data-bs-toggle="dropdown" aria-expanded="false">
                                 <div id="keys-data" style="display:none;">{{ keys | tojson }}</div>
                                 <i class="fas fa-search"></i>
-                                <ul class="dropdown-menu columns" aria-labelledby="btnkeyMenu" id="btnkeyOne">
-                                    <!-- keys will be added using JavaScript -->
-                                </ul>
+                                <ul class="dropdown-menu columns" aria-labelledby="btnkeyMenu" id="btnkeyOne"></ul>
                             </button>
                         </form>
                     </div>
                     <div style="width: auto;display: flex;">
                         <div>
-                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnscanMenu" data-bs-toggle="dropdown" title="扫描路径" aria-expanded="false">
+                            <!-- 扫盘目录下拉菜单 -->
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnscanMenu" data-bs-toggle="dropdown" aria-expanded="false">
                                 <div id="scan-paths-data" style="display:none;">{{ paths | tojson }}</div>
                                 <i class="fas fa-list" size="24px"></i>
-                                <ul class="dropdown-menu" aria-labelledby="btnscanMenu" id="btnscanOne">
-                                    <!-- Scan paths will be added using JavaScript -->
-                                </ul>
+                                <ul class="dropdown-menu" aria-labelledby="btnscanMenu" id="btnscanOne"></ul>
                             </button>
                         </div>
                         <div style="margin: 0 3px;">
-                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnsyncMenu" data-bs-toggle="dropdown" title="同步图片" aria-expanded="false">
+                            <!-- 图片目录下拉菜单 -->
+                            <button class="btn btn-danger ms-auto dropdown-toggle" type="button" id="btnsyncMenu" data-bs-toggle="dropdown" aria-expanded="false">
                                 <div id="sync-paths-data" style="display:none;">{{ paths | tojson }}</div>
                                 <i class="fas fa-images" size="24px"></i>
-                                <ul class="dropdown-menu" aria-labelledby="btnsyncMenu" id="btnsyncOne">
-                                    <!-- Scan paths will be added using JavaScript -->
-                                </ul>
+                                <ul class="dropdown-menu" aria-labelledby="btnsyncMenu" id="btnsyncOne"></ul>
                             </button>
                         </div>
-                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onShowThumbnail()" title="显示图片" id="btnshow">
+                        <button class="btn btn-danger ms-auto" type="button" onclick="onShowThumbnail()" title="Show Thumbnails" id="btnshow">
                             <i class="fas fa-image"></i>
                         </button>
-                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onClearDB()" title="清空数据库" id="btnclear">
+                        <button class="btn btn-danger ms-auto" type="button" onclick="onClearDB()" title="Clear Database" id="btnclear">
                             <i class="fas fa-database"></i>
                         </button>
-                        <button style="margin: 0 3px;" class="btn btn-danger ms-auto" type="button" onclick="onBlackMode()"title="黑暗模式" >
+                        <button class="btn btn-danger ms-auto" type="button" onclick="onBlackMode()"title="Dark Mode" >
                             <i class="fas fa-sun"></i>
                         </button>
                     </div>
@@ -254,51 +515,97 @@
             </div>
         </nav>
 
-        <!-- Offcanvas Favorites -->
-        <div class="offcanvas offcanvas-start" tabindex="-1" id="favoritesOffcanvas" aria-labelledby="favoritesOffcanvasLabel">
-            <div class="offcanvas-header offcanvas-favorites">
-                <h5 class="offcanvas-title" id="favoritesOffcanvasLabel">
-                    <i class="fas fa-star"></i> Favorites
-                </h5>
-                <button class="btn btn-danger ms-auto" type="button" data-bs-dismiss="offcanvas" aria-label="Cancel">
-                    <i class="fa fa-times-circle" aria-hidden="true"></i>
-                </button>
-            </div>
-            <div class="offcanvas-body offcanvas-favorites">
-                <ul class="list-group list-group-flush" id="favoritesList">
-                    <!-- Featured videos will be added using JavaScript -->
-                </ul>
-            </div>
-        </div>
-
         <!-- main -->
         <div style="width:100%;flex: 1 1 0%;display: flex;flex-direction: column">
             {% block content %}{% endblock %}
         </div>
     </div>
 
-    <!-- Modal -->
-    <div class="modal fade" id="customAlertModal" aria-labelledby="customAlertModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content" style="background-color: var(--body-color);">
-                <div class="modal-header" style="background-color: var(--primary-color);">
-                    <h5 class="ms-2 text-white" id="customAlertModalLabel">Tips</h5>
+    <!-- alertModal -->
+    <div class="modal fade" id="customAlertModal" aria-labelledby="alertModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="ms-2 text-white">Tips</span>
+                    <button class="btn btn-danger ms-auto" type="button" data-bs-dismiss="modal" title="Close">
+                        <i class="fas fa-times" aria-hidden="true"></i>
+                    </button>
                 </div>
-                <div class="modal-body" style="width:100%;flex: 1 1 0%;" id="customAlertMessage">
-                    <!-- The message content will be displayed here -->
+                <div class="modal-body">
+                    <div class="prompt-message d-flex align-items-center">
+                        <div class="message-icon me-3 flex-shrink-0">
+                            <i class="fas fa-exclamation-circle fs-4 theme-dependent-icon" data-light-class="text-danger" data-dark-class="text-warning"></i>
+                        </div>
+                        <div class="message-content flex-grow-1">
+                            <div id="alertMessage" class="fw-normal theme-dependent-text" data-light-class="text-dark" data-dark-class="text-light"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal" id="customAlertButton">5</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="alertButton">OK</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 本地 JS -->
+    <!-- renameModal -->
+    <div class="modal fade" id="customRenameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="ms-2 text-white">Rename</span>
+                    <button class="btn btn-danger ms-auto" type="button" data-bs-dismiss="modal" title="Close">
+                        <i class="fas fa-times" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-1">
+                                <label for="newFilePath" class="form-label mb-0">Path:</label>
+                            </div>
+                            <div class="col-10">
+                                <input type="text" class="form-control" style="width: 100%;" id="newFilePath" placeholder="Path" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-1">
+                                <label for="newFileName" class="form-label mb-0">Name:</label>
+                            </div>
+                            <div class="col-10">
+                                <textarea class="textarea-control" style="width: 100%; margin: auto;" id="newFileName" placeholder="Name"></textarea>
+                                <div class="invalid-feedback" id="fileNameError" style="display: none;">
+                                    illegal chars: \ / : * ? " <> |
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-1">
+                                <label for="newFileExt" class="form-label mb-0">Ext:</label>
+                            </div>
+                            <div class="col-10">
+                                <input type="text" class="form-control" style="width: 100%;" id="newFileExt" placeholder="Ext" readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="submitRename()">提交</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player JS -->
+    <script src="{{ url_for('static', path='js/video.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}"></script>
+    <!-- local JS -->
     <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ url_for('static', path='js/audio_player.js') }}"></script>
-    <script src="{{ url_for('static', path='js/favorites.js') }}"></script>
     <script src="{{ url_for('static', path='js/base58.js') }}"></script>
 </body>
 </html>

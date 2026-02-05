@@ -14,7 +14,11 @@ check_process_id() {
     pid=`ps -aux |grep "$1" |grep -v "grep" |awk '{print $2}' |head -n 1`
   fi
   # echo "process: $1 / pid: $pid"
-  if [ -z $pid ]; then
+  if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+    pid=0
+  fi
+  
+  if [ -z "$pid" ]; then
     pid=0
   fi
 }
@@ -23,16 +27,28 @@ check_port() {
     # tips
     echo -e "\033[34m netstat -anp tcp -v | grep \".$1 \" |awk '{print \$11}' |head -n 1 \033[0m"
     temp=`netstat -anp tcp -v | grep ".$1 " |awk '{print $11}' |head -n 1`
-    temp=${temp%/*}
-    pid=${temp#*:}
+    if [[ "$temp" =~ :([0-9]+) ]]; then
+      pid="${BASH_REMATCH[1]}"
+    else
+      temp_clean=$(echo $temp | sed 's/[^0-9]*\([0-9]\+\).*/\1/')
+      if [[ "$temp_clean" =~ ^[0-9]+$ ]]; then
+        pid=$temp_clean
+      else
+        pid=0
+      fi
+    fi
   else
     # tips
     echo -e "\033[34m netstat -tlpn | grep \":$1 \" |grep -v \"grep\" |awk '{print \$7}' |head -n 1 \033[0m"
     temp=`netstat -tlpn | grep ":$1 " |grep -v "grep" |awk '{print $7}' |awk -F '/' '{print $1}' |head -n 1`
     pid=${temp%/*}
   fi
-  # echo "port: $1 / pid: $pid"
-  if [ -z $pid ]; then
+  
+  if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
+    pid=0
+  fi
+  
+  if [ -z "$pid" ]; then
     pid=0
   fi
 }
@@ -44,9 +60,11 @@ elif [ -f '.env.sample' ]; then
 else
   export UVICORN_PORT=8000
 fi
+
 if [ -n "$SSL_CERTFILE" ] && [ -f "$SSL_CERTFILE" ] && [ -n "$SSL_KEYFILE" ] && [ -f "$SSL_KEYFILE" ]; then
   export UVICORN_PORT=443
 fi
+
 export PROCESS_MAIN='backend/main.py'
 export PROCESS_APP='backend/app.py'
 

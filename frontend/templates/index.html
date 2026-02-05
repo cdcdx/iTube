@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<!-- Displaying results -->
+
 {% if results.videos %}
 
     <!-- Video results -->
@@ -10,44 +10,178 @@
     <div class="tube-pc" id="listshow">
     {% endif %}
         {% for item in results.videos %}
-        <div>
-            <div class="image-container">
-                <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank">
-                    <img src="{{ '/frontend/static/images/video.png' if not isShow else item.thumbnail_url }}" data-src="{{ item.thumbnail_url }}" alt="{{ item.file }}" title="{{ item.path +'/'+ item.code + ': ' if item.code else '' }}{{ item.size }} MB {{item.resolution}}" class="thumbnail-img" style="width: 100%; aspect-ratio: 16/9; object-fit: contain; border-radius: 4px;">
-                </a>
+        <div class="video-card">
+            <!-- Image -->
+            <div class="thumbnail-wrapper" data-video-id="{{ item.id }}" data-video-base="{{ item.base }}">
+                <img src="{{ '/frontend/static/images/video.png' if not isShow else item.thumbnail_url }}"
+                    data-src="{{ item.thumbnail_url }}" alt="{{ item.file }}" title="{{ item.path +'/'+ item.code }}"
+                    class="thumbnail-img" loading="lazy">
+                <!-- 预览视频容器 -->
+                <div class="preview-video-container">
+                    <video class="preview-video" playsinline preload="none">
+                        <source src="" type="video/mp4" />
+                    </video>
+                    <!-- 进度条 -->
+                    <div class="preview-progress-container">
+                        <div class="preview-progress-bar"></div>
+                    </div>
+                </div>
             </div>
+            <!-- Star -->
+            <div class="rating-display d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank" class="title-link">
+                <div class="video-info">
+                    {{ item.id }} / {{ "%d:%02d:%02d"|format(item.duration // 3600, (item.duration % 3600) // 60, item.duration % 60) }} /
+                    {% if item.size >= 1024 %}
+                        {{ "%.1f"|format(item.size / 1024.0) }}G
+                    {% else %}
+                        {{ "%.1f"|format(item.size) }}M
+                    {% endif %} / {{ item.resolution }}
+                </div></a>
+                <div class="rating-container" style="width: 90px;">
+                    <span class="rating-stars" id="rating-stars-{{ item.id }}" data-video-id="{{ item.id }}" data-score="{{ item.score }}" title="rate">
+                    {% if item.score %}
+                        {% for i in range(1, 6) %}
+                            {% if i <= item.score %}
+                                <i class="fas fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                            {% elif i == (item.score + 0.5)|int and item.score % 1 != 0 %}
+                                <i class="fas fa-star-half-alt text-warning star-icon" data-value="{{ i }}"></i>
+                            {% else %}
+                                <i class="far fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% for i in range(1, 6) %}
+                            <i class="far fa-star text-warning star-icon" data-value="{{ i }}"></i>
+                        {% endfor %}
+                    {% endif %}
+                    </span>
+                </div>
+            </div>
+            <!-- Title -->
             <div class="d-flex align-items-center justify-content-between mt-2">
-                <h5 class="text-start mb-0">{{ item.id }}
-                    <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank" class="text-dark text-decoration-none">
-                        {{ item.file | replace('.mp4', '') | replace('.mkv', '') }}
-                    </a>
-                </h5>
+                <a href="{{ url_for('play_video', id_name=item.id) }}" target="_blank" class="title-link">
+                <h5 class="text-start mb-0 video-title">
+                    <span class="filename-container" title="{{ item.path +'/'+ item.file }}">
+                        {% set clean_file = item.file | replace('.mp4', '') | replace('.mkv', '') %}
+                        {% set parts = clean_file.split('-') %}
+                        {% if parts|length > 1 %}
+                            {% set prefix = parts[:-1]|join('-') %}
+                            {% set suffix = '-' + parts[-1] %}
+                            <span class="filename-truncated-smart">{{ prefix }}</span>{{ suffix }}
+                        {% else %}
+                            <span class="filename-truncated-smart">{{ clean_file }}</span>
+                        {% endif %}
+                    </span>
+                </h5></a>
             </div>
         </div>
         {% endfor %}
     </div>
 
     <!-- Pagination -->
-    <div style="height: 44px; justify-content: space-between;">
-        <div style="height: 100%; background-color: var(--body-color); padding: 0 10px 0 10px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; justify-content: space-between;"></div>
-            <div style="margin: auto;">
-                <a href="#" class="btn btn-danger ms-auto" id="btnone"><i class="fas fa-angle-double-left"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btntwo"><i class="fas fa-angle-left"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnthree"></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnfour"><i class="fas fa-angle-right"></i></a>
-                <a href="#" class="btn btn-danger ms-auto" id="btnfive"><i class="fas fa-angle-double-right"></i></a>
-            </div>
-            <div style="width: auto;"></div>
+    <div id="page-data" data-total-limit="{{ results.limit | default(24) }}" data-total-count="{{ results.count | default(0) }}" style="display: none;"></div>
+    <div class="pagination-container">
+        <div class="pagination-wrapper">
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnone"><i class="fas fa-angle-double-left"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btntwo"><i class="fas fa-angle-left"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnthree"></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnfour"><i class="fas fa-angle-right"></i></a>
+            <a href="#" class="btn btn-danger ms-auto control-btn" id="btnfive"><i class="fas fa-angle-double-right"></i></a>
         </div>
     </div>
-    
-    <!-- Resize JavaScript -->
+
+    <!-- Custom JavaScript -->
     <script>
-        // Reset list width and height
+        // 更新评分显示
+        function updateRatingDisplay(videoId, newScore) {
+            const ratingElement = document.getElementById(`rating-stars-${videoId}`);
+            if (ratingElement) {
+                let starsHtml = '';
+
+                for (let i = 1; i <= 5; i++) {
+                    if (i <= Math.floor(newScore)) {
+                        // 完整星
+                        starsHtml += `<i class="fas fa-star text-warning star-icon" data-value="${i}"></i>`;
+                    } else if (i == Math.ceil(newScore) && newScore % 1 >= 0.5) {
+                        // 半星
+                        starsHtml += `<i class="fas fa-star-half-alt text-warning star-icon" data-value="${i}"></i>`;
+                    } else {
+                        // 空星
+                        starsHtml += `<i class="far fa-star text-warning star-icon" data-value="${i}"></i>`;
+                    }
+                }
+
+                ratingElement.innerHTML = starsHtml;
+                ratingElement.setAttribute('data-score', newScore);
+            }
+        }
+
+        // 评分处理
+        document.addEventListener('click', function (e) {
+            if (e.target.classList.contains('star-icon')) {
+                const ratingSpan = e.target.closest('.rating-stars');
+                if (ratingSpan) {
+                    const videoId = ratingSpan.dataset.videoId;
+                    const starValue = parseInt(e.target.dataset.value);
+                    
+                    // 提交评分
+                    onFileScore(videoId, starValue);
+                }
+            }
+        });
+
+        // debounce
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Reset size and dimensions
         function resetSize() {
             const listShow = document.getElementById('listshow');
-            listShow.style.width = (window.innerWidth - 5) + "px";
+            if (listShow) {
+                listShow.style.width = (window.innerWidth - 15) + "px";
+            }
+        }
+
+        // Set button links
+        function setButtonLinks(query, currentPage, totalPages) {
+            query = query.replace('+', ' ');
+            query = encodeURIComponent(query);
+            query = query.replace(/\%2B/g, '%20');
+            
+            const buttons = {
+                btnone: { page: Math.max(1, currentPage - 2), visible: currentPage > 2 },
+                btntwo: { page: Math.max(1, currentPage - 1), visible: currentPage > 1 },
+                btnthree: { page: currentPage, visible: true },
+                btnfour: { page: Math.min(totalPages, currentPage + 1), visible: currentPage < totalPages },
+                btnfive: { page: Math.min(totalPages, currentPage + 2), visible: currentPage < totalPages - 1 }
+            };
+
+            for (const [id, button] of Object.entries(buttons)) {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    if (button.visible) {
+                        btn.href = `/?page=${button.page}&query=${query}`;
+                        btn.hidden = false;
+                    } else {
+                        btn.hidden = true;
+                    }
+                }
+            }
+            
+            const btnThree = document.getElementById('btnthree');
+            if (btnThree) {
+                btnThree.textContent = `${currentPage}/${totalPages}`;
+            }
         }
 
         // Parse URL parameters
@@ -62,46 +196,21 @@
             return queryParams;
         }
 
-        // Set button links
-        function setButtonLinks(query, currentPage, totalPages) {
-            query=query.replace('+', ' ');
-            query=encodeURIComponent(query);
-            query=query.replace(/\%2B/g, '%20');
-            // console.log(query);
-            const buttons = {
-                btnone: { page: currentPage - 2, visible: currentPage > 2 },
-                btntwo: { page: currentPage - 1, visible: currentPage > 1 },
-                btnthree: { page: currentPage, visible: true },
-                btnfour: { page: currentPage + 1, visible: currentPage < totalPages },
-                btnfive: { page: currentPage + 2, visible: currentPage < totalPages - 1 }
-            };
-
-            for (const [id, button] of Object.entries(buttons)) {
-                const btn = document.getElementById(id);
-                if (button.visible) {
-                    btn.href = `/?page=${button.page}&query=${query}`;
-                    btn.hidden = false;
-                } else {
-                    btn.hidden = true;
-                }
-            }
-            document.getElementById('btnthree').textContent = `${currentPage}/${totalPages}`;
-        }
-
-        // Reset list width and height
-        resetSize();
-        // Listen to window resize event
-        window.addEventListener('resize', resetSize);
-
         // Get parameters
         const params = getQueryParams();
         const query = params.query || '';
         const currentPage = parseInt(params.page || '1', 10);
-        const count = {{ results.count|tojson }};
-        const limit = {{ results.limit|tojson }};
-        const totalPages = Math.ceil(count / limit);
+        const pageDataElement = document.getElementById('page-data');
+        const totalCount = parseInt(pageDataElement.dataset.totalCount || '0');
+        const totalLimit = parseInt(pageDataElement.dataset.totalLimit || '24');
+        const totalPages = Math.ceil(totalCount / totalLimit);
         // Set button links
         setButtonLinks(query, currentPage, totalPages);
+
+        // Reset list width and height
+        resetSize();
+        const debouncedResize = debounce(resetSize, 250);
+        window.addEventListener('resize', debouncedResize);
 
         // Listen to keyboard events
         document.addEventListener('keydown', function (event) {
@@ -112,11 +221,13 @@
                     if (btnFour && !btnFour.hidden) {
                         btnFour.click();
                     }
+                    event.preventDefault();
                     break;
                 case 'ArrowLeft': // Previous page
                     if (btnTwo && !btnTwo.hidden) {
                         btnTwo.click();
                     }
+                    event.preventDefault();
                     break;
                 case 'ArrowUp': // Do nothing
                 case 'ArrowDown': // Do nothing
@@ -125,6 +236,340 @@
         });
     </script>
 
+    <!-- Player JavaScript -->
+    <script>
+        let currentPreviewVideo = null;
+        let previewTimeout = null;
+        let mouseMoveTimer = null;
+
+        // 鼠标进入缩略图区域
+        function handleMouseEnter(thumbnailWrapper) {
+            const videoId = thumbnailWrapper.dataset.videoId;
+            const base = thumbnailWrapper.dataset.videoBase;
+
+            // 设置延迟加载，避免频繁触发
+            previewTimeout = setTimeout(() => {
+                const previewVideoContainer = thumbnailWrapper.querySelector('.preview-video-container');
+                const previewVideo = thumbnailWrapper.querySelector('.preview-video');
+                const progressBar = thumbnailWrapper.querySelector('.preview-progress-bar');
+                const progressContainer = thumbnailWrapper.querySelector('.preview-progress-container');
+
+                if (!previewVideo) return;
+
+                // 设置视频源
+                previewVideo.src = `/api/stream/${videoId}/${base}`;
+                previewVideoContainer.style.display = 'block';
+
+                // 短暂延迟后开始播放
+                setTimeout(() => {
+                    if (previewVideo) {
+                        // 在设置视频源后，先静音再尝试播放
+                        previewVideo.muted = true;
+                        previewVideo.play().then(() => {
+                            previewVideo.muted = false;
+                        }).catch(error => {
+                            console.log("Auto-play prevented by browser policy:", error);
+                            // 尝试带选项的播放
+                            previewVideo.play({
+                                muted: true,
+                                autoplay: true
+                            }).catch(error => {
+                                console.log("Muted auto-play also failed:", error);
+                            });
+                        });
+                    }
+                }, 100);
+
+                // 添加时间更新事件监听器
+                previewVideo.addEventListener('timeupdate', function () {
+                    if (progressBar && this.duration) {
+                        const progress = (this.currentTime / this.duration) * 100;
+                        progressBar.style.width = progress + '%';
+                    }
+                });
+
+                // 添加加载元数据事件监听器
+                previewVideo.addEventListener('loadedmetadata', function () {
+                    if (progressBar) {
+                        progressBar.style.width = '0%';
+                    }
+                });
+
+                // 实现进度条拖拽功能
+                let isDragging = false;
+
+                // 鼠标按下在进度条上
+                progressContainer.addEventListener('mousedown', function (e) {
+                    isDragging = true;
+                    updateProgressBar(e);
+                    // 防止拖拽时选中其他元素
+                    e.preventDefault();
+                });
+
+                // 鼠标移动时更新进度
+                document.addEventListener('mousemove', function (e) {
+                    if (isDragging) {
+                        updateProgressBar(e);
+                    }
+                });
+
+                // 鼠标松开停止拖拽
+                document.addEventListener('mouseup', function () {
+                    isDragging = false;
+                });
+
+                // 鼠标离开进度容器也停止拖拽
+                progressContainer.addEventListener('mouseleave', function () {
+                    isDragging = false;
+                });
+
+                // 在progressContainer上添加点击事件
+                progressContainer.addEventListener('click', function (e) {
+                    if (!isDragging) { // 只有未拖拽状态下才响应点击
+                        const rect = progressContainer.getBoundingClientRect();
+                        const pos = (e.clientX - rect.left) / rect.width;
+                        const newTime = pos * previewVideo.duration;
+
+                        if (!isNaN(newTime) && previewVideo.duration) {
+                            previewVideo.currentTime = newTime;
+
+                            // 更新进度条显示
+                            const progress = (newTime / previewVideo.duration) * 100;
+                            progressBar.style.width = progress + '%';
+                            // 检查视频是否暂停，如果是则播放
+                            if (previewVideo.paused) {
+                                previewVideo.play();
+                            }
+                        }
+                    }
+                });
+
+                // 更新进度条并调整视频播放位置
+                function updateProgressBar(e) {
+                    const rect = progressContainer.getBoundingClientRect();
+                    const pos = (e.clientX - rect.left) / rect.width;
+                    const newTime = pos * previewVideo.duration;
+
+                    if (!isNaN(newTime) && previewVideo.duration) {
+                        previewVideo.currentTime = newTime;
+
+                        // 更新进度条显示
+                        const progress = (newTime / previewVideo.duration) * 100;
+                        progressBar.style.width = progress + '%';
+                    }
+                }
+
+                // 隐藏原缩略图，显示播放图标
+                const img = thumbnailWrapper.querySelector('img');
+                const playIcon = thumbnailWrapper.querySelector('.hover-play-icon');
+                if (img) img.style.opacity = '0.3';
+                if (playIcon) playIcon.style.display = 'block';
+
+                // 记录当前正在预览的视频
+                currentPreviewVideo = previewVideo;
+                // 显示进度条
+                progressContainer.style.opacity = '1';
+            }, 500);
+        }
+
+        // 鼠标离开缩略图区域
+        function handleMouseLeave(thumbnailWrapper) {
+            // 清除延迟加载定时器
+            if (previewTimeout) {
+                clearTimeout(previewTimeout);
+                previewTimeout = null;
+            }
+
+            const previewVideoContainer = thumbnailWrapper.querySelector('.preview-video-container');
+            const previewVideo = thumbnailWrapper.querySelector('.preview-video');
+            const progressBar = thumbnailWrapper.querySelector('.preview-progress-bar');
+            const progressContainer = thumbnailWrapper.querySelector('.preview-progress-container');
+
+            if (previewVideo) {
+                previewVideo.pause();
+                previewVideo.currentTime = 0; // 重置到开头
+                previewVideo.src = ''; // 清空视频源
+
+                // 重置进度条
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                }
+            }
+
+            // 隐藏预览视频
+            previewVideoContainer.style.display = 'none';
+
+            // 恢复原缩略图
+            const img = thumbnailWrapper.querySelector('img');
+            const playIcon = thumbnailWrapper.querySelector('.hover-play-icon');
+            if (img) img.style.opacity = '1';
+            if (playIcon) playIcon.style.display = 'none';
+
+            // 清除当前预览视频记录
+            currentPreviewVideo = null;
+
+            // 隐藏进度条
+            if (progressContainer) {
+                progressContainer.style.opacity = '0';
+            }
+
+            // 清除鼠标移动计时器
+            if (mouseMoveTimer) {
+                clearTimeout(mouseMoveTimer);
+                mouseMoveTimer = null;
+            }
+        }
+
+        // 鼠标在缩略图区域内移动
+        function handleMouseMove(thumbnailWrapper) {
+            const progressContainer = thumbnailWrapper.querySelector('.preview-progress-container');
+
+            if (progressContainer) {
+                // 显示进度条
+                progressContainer.style.opacity = '1';
+
+                // 如果存在之前的计时器，清除它
+                if (mouseMoveTimer) {
+                    clearTimeout(mouseMoveTimer);
+                    mouseMoveTimer = null;
+                }
+
+                // 计时器:2秒后隐藏进度条
+                mouseMoveTimer = setTimeout(() => {
+                    if (progressContainer && !progressContainer.matches(':hover')) {
+                        progressContainer.style.opacity = '0';
+                    }
+                }, 2000); // 2秒后隐藏
+            }
+        }
+
+        // 鼠标移出容器隐藏进度条
+        function handleProgressMouseLeave(thumbnailWrapper) {
+            const progressContainer = thumbnailWrapper.querySelector('.preview-progress-container');
+            
+            if (progressContainer) {
+                // 如果鼠标离开进度条容器，则设置定时器隐藏进度条
+                mouseMoveTimer = setTimeout(() => {
+                    progressContainer.style.opacity = '0';
+                }, 1000); // 1秒后隐藏
+            }
+        }
+
+        // 添加事件监听器
+        document.addEventListener('DOMContentLoaded', function () {
+            const thumbnailWrappers = document.querySelectorAll('.thumbnail-wrapper');
+
+            thumbnailWrappers.forEach(wrapper => {
+                wrapper.addEventListener('mouseenter', function () {
+                    handleMouseEnter(this);
+                });
+
+                wrapper.addEventListener('mouseleave', function () {
+                    handleMouseLeave(this);
+                });
+
+                // 添加鼠标移动事件监听器
+                wrapper.addEventListener('mousemove', function (e) {
+                    handleMouseMove(this);
+                });
+
+                // 为进度条添加鼠标事件监听器
+                const progressContainer = wrapper.querySelector('.preview-progress-container');
+                if (progressContainer) {
+                    progressContainer.addEventListener('mouseenter', function() {
+                        if (mouseMoveTimer) {
+                            clearTimeout(mouseMoveTimer);
+                            mouseMoveTimer = null;
+                        }
+                        this.style.opacity = '1';
+                    });
+                    
+                    progressContainer.addEventListener('mouseleave', function() {
+                        const parentWrapper = this.closest('.thumbnail-wrapper');
+                        handleProgressMouseLeave(parentWrapper);
+                    });
+                }
+
+                wrapper.addEventListener('click', function (e) {
+                    if (e.target.closest('.preview-progress-container')) {
+                        return;
+                    }
+                    const videoId = this.dataset.videoId;
+                    window.open(`/video/${videoId}`, '_blank');
+                });
+            });
+        });
+
+        // 停止当前预览视频
+        document.addEventListener('scroll', function () {
+            if (currentPreviewVideo) {
+                const allProgressBars = document.querySelectorAll('.preview-progress-bar');
+                const allProgressContainers = document.querySelectorAll('.preview-progress-container');
+                
+                allProgressBars.forEach(bar => {
+                    bar.style.width = '0%';
+                });
+                
+                allProgressContainers.forEach(container => {
+                    container.style.opacity = '0';
+                });
+
+                currentPreviewVideo.pause();
+                currentPreviewVideo.currentTime = 0;
+                currentPreviewVideo.src = ''; // 清空视频源
+
+                // 隐藏所有预览视频
+                document.querySelectorAll('.preview-video-container').forEach(container => {
+                    container.style.display = 'none';
+                });
+
+                document.querySelectorAll('.thumbnail-img').forEach(img => {
+                    img.style.opacity = '1';
+                });
+
+                document.querySelectorAll('.hover-play-icon').forEach(icon => {
+                    icon.style.display = 'none';
+                });
+
+                currentPreviewVideo = null;
+            }
+        });
+
+        // 失去焦点停止预览
+        window.addEventListener('blur', function() {
+            if (currentPreviewVideo) {
+                const allProgressBars = document.querySelectorAll('.preview-progress-bar');
+                const allProgressContainers = document.querySelectorAll('.preview-progress-container');
+                
+                allProgressBars.forEach(bar => {
+                    bar.style.width = '0%';
+                });
+                
+                allProgressContainers.forEach(container => {
+                    container.style.opacity = '0';
+                });
+
+                currentPreviewVideo.pause();
+                currentPreviewVideo.currentTime = 0;
+                currentPreviewVideo.src = ''; // 清空视频源
+
+                // 隐藏所有预览视频
+                document.querySelectorAll('.preview-video-container').forEach(container => {
+                    container.style.display = 'none';
+                });
+
+                document.querySelectorAll('.thumbnail-img').forEach(img => {
+                    img.style.opacity = '1';
+                });
+
+                document.querySelectorAll('.hover-play-icon').forEach(icon => {
+                    icon.style.display = 'none';
+                });
+
+                currentPreviewVideo = null;
+            }
+        });
+    </script>
 {% else %}
 
     <p class="text-color text-center">Nothing found matching your request.</p>

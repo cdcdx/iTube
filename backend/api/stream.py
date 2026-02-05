@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel
 
-from utils.db import database, get_db
+from utils.db import get_db, format_query_for_db, convert_row_to_dict, format_datetime_fields
 from utils.log import log as logger
 from utils.local import *
 from config import *
@@ -166,7 +166,6 @@ async def convert_video(request: Request, id_name: str, base_name: str):
                 yield b""
 
         return StreamingResponse(generate(), media_type='video/mp4')
-        
     except Exception as e:
         logger.error(f"/api/convert/{id_name}/{base_name[:20]} - except ERROR: {str(e)}")
         return HTMLResponse("Server error", status_code=500)
@@ -242,7 +241,6 @@ async def stream_and_convert_video(request: Request, id_name: str, base_name: st
                     yield b""
 
             return StreamingResponse(generate(), media_type='video/mp4')
-        
         else: # 直接返回文件流
             mime_type, _ = mimetypes.guess_type(video_path)
             mime_type = mime_type or 'application/octet-stream'
@@ -282,7 +280,6 @@ async def stream_and_convert_video(request: Request, id_name: str, base_name: st
                     return StreamingResponse(interfile(), status_code=206, headers=headers, media_type=mime_type)
             else:
                 return FileResponse(video_path, media_type=mime_type)
-        
     except Exception as e:
         logger.error(f"/api/stream/convert/{id_name}/{base_name[:20]} - except ERROR: {str(e)}")
         return HTMLResponse("Server error", status_code=500)
