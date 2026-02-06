@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>{% if title and title|length > 0 %}{{ title }}{% else %}{{ apptitle }}{% endif %}</title>
+
+    <!-- 预加载关键资源 -->
+    <link rel="preload" href="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}" as="script">
+    <link rel="preload" href="{{ url_for('static', path='js/base58.js') }}" as="script">
+
     <script>
         // 黑暗模式防止闪烁
         (function() {
@@ -11,29 +16,7 @@
                 document.documentElement.setAttribute('data-theme', 'dark');
             }
         })();
-        // storage
-        function getLocalStorage(key, defaultValue) {
-            if (typeof (Storage) === "undefined") {
-                return defaultValue;
-            }
-            const stored = localStorage.getItem(key);
-            if (stored === null) {
-                return defaultValue;
-            }
-            // 解析JSON
-            try {
-                return JSON.parse(stored);
-            } catch (e) {
-                // 对于简单的字符串值，直接返回
-                return stored;
-            }
-        }
-    </script>
-    <!-- local CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css?v=5.3.3') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/all.min.css?v=5.15.1') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
-    <script>
+
         // ----------------------------------- storage -----------------------------------
 
         function getLocalStorage(key, defaultValue) {
@@ -89,11 +72,7 @@
             if (themeToggleBtn) {
                 const icon = themeToggleBtn.querySelector('i');
                 if (icon) {
-                    if (isBlack) {
-                        icon.className = 'fas fa-moon';
-                    } else {
-                        icon.className = 'fas fa-sun';
-                    }
+                    icon.className = isBlack ? 'fas fa-moon' : 'fas fa-sun';
                 }
             }
         }
@@ -254,10 +233,8 @@
             if (stars !== undefined) {
                 makeRequest(`/api/score/${id}/${stars}`).then(responsecontent => {
                         if (responsecontent.code === 200) {
-                            // 更新当前页面的评分显示
                             updateRatingDisplay(id, stars);
                         } else {
-                            // 显示错误信息
                             onModalAlert(responsecontent.msg);
                         }
                     });
@@ -273,7 +250,7 @@
                 makeRequest(url).then(responsecontent => {
                     if (responsecontent.code === 200) {
                         onModalAlert(responsecontent.data);
-                        location.reload();  // F5刷新
+                        location.reload();
                     } else {
                         onModalAlert(responsecontent.msg);
                     }
@@ -376,7 +353,10 @@
 
             // 如果文件名没有改变，则不执行重命名操作
             if (newFullName === oldname) {
-                bootstrap.Modal.getInstance(document.getElementById('customRenameModal')).hide();
+                const modalInstance = bootstrap.Modal.getInstance(document.getElementById('customRenameModal'));
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
                 return;
             }
 
@@ -413,7 +393,6 @@
 
         function onFileWebLink(code) {
             let url;
-
             if (code && code.toUpperCase().startsWith('FC2-PPV')) {
                 url = `https://123av.com/ja/v/${code}`;
             } else if (code) {
@@ -446,11 +425,7 @@
             if (themeToggleBtn) {
                 const icon = themeToggleBtn.querySelector('i');
                 if (icon) {
-                    if (isBlack) {
-                        icon.className = 'fas fa-moon';
-                    } else {
-                        icon.className = 'fas fa-sun';
-                    }
+                    icon.className = isBlack ? 'fas fa-moon' : 'fas fa-sun';
                 }
             }
             
@@ -460,6 +435,20 @@
             populateKeysDropdown();
         };
     </script>
+
+    <!-- local CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/bootstrap.min.css?v=5.3.3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/all.min.css?v=5.15.1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+    <!-- Player CSS -->
+    <link href="{{ url_for('static', path='css/plyr.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/video-js.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='css/mediaelementplayer.min.css') }}" rel="stylesheet">
+    <!--
+    <link href="https://cdn.plyr.io/3.8.4/plyr.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/video.js@8.23.4/dist/video-js.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/mediaelement@4.2.16/build/mediaelementplayer.min.css" rel="stylesheet">
+    -->
 </head>
 <body>
     <div style="height: 100vh;display: flex;flex-direction: column;">
@@ -601,11 +590,19 @@
         </div>
     </div>
 
-    <!-- Player JS -->
-    <script src="{{ url_for('static', path='js/video.min.js') }}"></script>
-    <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}"></script>
     <!-- local JS -->
     <script src="{{ url_for('static', path='js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', path='js/base58.js') }}"></script>
+    <!-- Player JS -->
+    <script src="{{ url_for('static', path='js/hls.js') }}"></script>
+    <script src="{{ url_for('static', path='js/plyr.polyfilled.js') }}"></script>
+    <script src="{{ url_for('static', path='js/video.min.js') }}"></script>
+    <script src="{{ url_for('static', path='js/mediaelement-and-player.min.js') }}"></script>
+    <!--
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+    <script src="https://cdn.plyr.io/3.8.4/plyr.polyfilled.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/video.js@8.23.4/dist/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mediaelement@4.2.16/build/mediaelement-and-player.min.js"></script>
+    -->
 </body>
 </html>

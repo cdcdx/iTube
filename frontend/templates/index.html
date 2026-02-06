@@ -361,9 +361,7 @@
 
                 // 隐藏原缩略图，显示播放图标
                 const img = thumbnailWrapper.querySelector('img');
-                const playIcon = thumbnailWrapper.querySelector('.hover-play-icon');
                 if (img) img.style.opacity = '0.3';
-                if (playIcon) playIcon.style.display = 'block';
 
                 // 记录当前正在预览的视频
                 currentPreviewVideo = previewVideo;
@@ -401,9 +399,7 @@
 
             // 恢复原缩略图
             const img = thumbnailWrapper.querySelector('img');
-            const playIcon = thumbnailWrapper.querySelector('.hover-play-icon');
             if (img) img.style.opacity = '1';
-            if (playIcon) playIcon.style.display = 'none';
 
             // 清除当前预览视频记录
             currentPreviewVideo = null;

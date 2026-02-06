@@ -2,15 +2,10 @@
 {% block content %}
 
 <div class="video-container">
-    <!-- Import Video.js CSS/JS -->
-    <link href="{{ url_for('static', path='css/video-js.css') }}" rel="stylesheet">
-    <!-- Import Mediaelement CSS/JS -->
-    <link href="{{ url_for('static', path='css/mediaelementplayer.min.css?v=4.2.16') }}" rel="stylesheet">
-
     <div id="aspectratio-data" style="display:none;">{{ results.videos.aspectratio | tojson }}</div>
     <!-- Video Player -->
     <div id="player-wrapper" class="player-wrapper">
-        <!-- Video.js -->
+        <!-- Video.js Player -->
         <div id="player-wrapper-videojs" class="player-wrapper-player" style="display: none;">
             <div id="player-videojs" class="player-container" 
                 title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB">
@@ -21,11 +16,22 @@
             </div>
         </div>
 
-        <!-- MediaElementPlayer -->
+        <!-- MediaElement Player -->
         <div id="player-wrapper-mediaelement" class="player-wrapper-player" style="display: none;">
             <div id="player-mediaelement" class="player-container" 
                 title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB">
                 <video id="video-mediaelement" class="player-video-container" style="width: 100%; height: 100%;" controls preload="auto">
+                    <source src="{{ url_for('stream_and_convert_video', id_name=id, base_name=base) }}" type="video/mp4" />
+                    Your browser does not support video playback.
+                </video>
+            </div>
+        </div>
+
+        <!-- Plyr HLS Player -->
+        <div id="player-wrapper-plyr" class="player-wrapper-player" style="display: none;">
+            <div id="player-plyr" class="player-container" 
+                title="{{ results.videos.code + ': ' if results.videos.code else '' }}{{ results.videos.size }} MB">
+                <video id="video-plyr" class="player-video-container player-plyr" style="width: 100%; height: 100%;" controls crossorigin playsinline>
                     <source src="{{ url_for('stream_and_convert_video', id_name=id, base_name=base) }}" type="video/mp4" />
                     Your browser does not support video playback.
                 </video>
@@ -39,7 +45,7 @@
             <textarea class="textarea-control" id="videoDescription" style="width: 100%; margin: auto; border: none;" readonly>{{ results.videos.file }}</textarea>
         </div>
         <div class="video-controls-container">
-            <!-- 评分显示 -->
+            <!-- Stars -->
             <div class="rating-container" style="width: 90px;">
                 <span class="rating-stars" id="rating-stars-{{ results.videos.id }}" data-video-id="{{ results.videos.id }}" data-score="{{ results.videos.score }}" title="Rate">
                     {% if results.videos.score %}
@@ -59,7 +65,7 @@
                     {% endif %}
                 </span>
             </div>
-            <!-- 控制按钮 -->
+            <!-- Control -->
             <div style="display: flex; flex-wrap: wrap; gap: 2px;">
                 <button class="btn btn-danger ms-auto control-btn" type="button" style="width: 30px; height: 30px;"
                     onclick="onFileDelete('{{ id }}')" title="Delete">
@@ -87,7 +93,7 @@
                 </button>
             </div>
         </div>
-        <!-- 切换 -->
+        <!-- Switch -->
         <div style="width: 60px; height: 80px; margin-bottom: 2px;">
             <button class="btn btn-success ms-auto control-btn" type="button" style="width: 100%; height: 100%;"
                 onclick="togglePlayer()" title="Switch">
@@ -237,17 +243,14 @@
             }
 
             // Set individual player dimensions
-            const PlayerVideojs = document.getElementById('player-videojs');
-            if (PlayerVideojs) {
-                PlayerVideojs.style.width = width + "px";
-                PlayerVideojs.style.height = height + "px";
-            }
-
-            const PlayerMediaelement = document.getElementById('player-mediaelement');
-            if (PlayerMediaelement) {
-                PlayerMediaelement.style.width = width + "px";
-                PlayerMediaelement.style.height = height + "px";
-            }
+            const players = ['player-plyr', 'player-videojs', 'player-mediaelement'];
+            players.forEach(playerId => {
+                const player = document.getElementById(playerId);
+                if (player) {
+                    player.style.width = width + "px";
+                    player.style.height = height + "px";
+                }
+            });
 
             const videoTitle = document.getElementById('videotitle');
             if (videoTitle) {
@@ -298,25 +301,29 @@
 
     <!-- Player JavaScript -->
     <script>
-        let videojsPlayer, mediaelementPlayer;
-        let currentPlayer = getLocalStorage('Player', 'mediaelement');
+        let plyrPlayer, videojsPlayer, mediaelementPlayer;
+        let currentPlayer = getLocalStorage('Player', 'plyr');
 
         // 初始化播放器
         function initializePlayers() {
-            // 隐藏所有播放器包装器，直到确定要显示哪个播放器
+            // 隐藏所有播放器
+            const plyrWrapper = document.getElementById('player-wrapper-plyr');
             const videojsWrapper = document.getElementById('player-wrapper-videojs');
             const mediaelementWrapper = document.getElementById('player-wrapper-mediaelement');
+            if (plyrWrapper) plyrWrapper.style.display = 'none';
             if (videojsWrapper) videojsWrapper.style.display = 'none';
             if (mediaelementWrapper) mediaelementWrapper.style.display = 'none';
 
-            // 根据当前选择的播放器初始化对应的播放器
-            if (currentPlayer === 'videojs') {
-                initVideoJSPlayer(); // 初始化videojs
+            // 根据配置初始化播放器
+            if (currentPlayer === 'plyr') {
+                initPlyrPlayer();
+            } else if (currentPlayer === 'videojs') {
+                initVideoJSPlayer();
             } else {
-                initMediaElementPlayer(); // 初始化MediaElementPlayer
+                initMediaElementPlayer();
             }
 
-            // 显示正确的播放器
+            // 切换播放器
             switchPlayer(currentPlayer, false);
         }
 
@@ -417,22 +424,114 @@
             });
         }
 
+        // 初始化Plyr播放器
+        function initPlyrPlayer() {
+            // 如果已经初始化则返回
+            if (plyrPlayer) return;
+
+            const videoElement = document.getElementById('video-plyr');
+            if (!videoElement) return;
+
+            // 初始化Plyr
+            plyrPlayer = new Plyr('#video-plyr', {
+                controls: [
+                    'play-large',
+                    'play',
+                    'progress',
+                    'current-time',
+                    'mute',
+                    'volume',
+                    'captions',
+                    'settings',
+                    'pip',
+                    'airplay',
+                    'download',
+                    'fullscreen'
+                ],
+                i18n: {
+                    restart: '重新开始',
+                    rewind: '倒带 {seektime}s',
+                    play: '播放',
+                    pause: '暂停',
+                    fastForward: '快进 {seektime}s',
+                    seek: 'Seek',
+                    played: 'Played',
+                    buffered: 'Buffered',
+                    currentTime: 'Current time',
+                    duration: 'Duration',
+                    volume: 'Volume',
+                    mute: '静音',
+                    unmute: '取消静音',
+                    enableCaptions: '开启字幕',
+                    disableCaptions: '关闭字幕',
+                    download: '下载',
+                    enterFullscreen: '进入全屏',
+                    exitFullscreen: '退出全屏',
+                    frameTitle: 'Player for {title}',
+                    captions: '字幕',
+                    settings: '设置',
+                    speed: '速度',
+                    quality: '质量',
+                    loop: '循环',
+                    start: '开始',
+                    end: '结束',
+                    all: '全部',
+                    reset: '重置',
+                    disabled: '禁用',
+                    advertisement: '广告',
+                    qualityBadge: {
+                        2160: '4K',
+                        1440: 'HD',
+                        1080: 'HD',
+                        720: 'HD',
+                        576: 'SD',
+                        480: 'SD',
+                    },
+                },
+            });
+
+            // 如果源是HLS格式，使用HLS.js
+            const source = videoElement.querySelector('source');
+            if (source && (source.type === 'application/x-mpegURL' || source.src.includes('.m3u8'))) {
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(source.src);
+                    hls.attachMedia(videoElement);
+                    
+                    // Listen to HLS event
+                    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                        console.log('HLS manifest parsed');
+                        videoElement.play().catch(error => console.log('Play after HLS init failed:', error));
+                    });
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Safari native HLS support
+                    videoElement.src = source.src;
+                    videoElement.addEventListener('loadedmetadata', function() {
+                        console.log('Safari HLS loaded');
+                        videoElement.play().catch(error => console.log('Play after HLS init failed:', error));
+                    });
+                }
+            }
+
+            console.log('plyr player initialized');
+        }
+
         // 播放器切换函数
         function switchPlayer(targetPlayer, shouldSyncState = true) {
             let syncData = null;
 
             // 仅在需要同步状态时获取当前播放状态
             if (shouldSyncState) {
-                if (currentPlayer === 'mediaelement' && mediaelementPlayer) {
+                if (currentPlayer === 'plyr' && plyrPlayer) {
                     // 获取当前播放器状态
                     syncData = {
-                        currentTime: mediaelementPlayer.media.currentTime || 0,
-                        volume: mediaelementPlayer.media.volume || 1,
-                        paused: mediaelementPlayer.media.paused
+                        currentTime: plyrPlayer.currentTime || 0,
+                        volume: plyrPlayer.volume || 1,
+                        paused: plyrPlayer.paused
                     };
 
                     // 暂停当前播放器
-                    mediaelementPlayer.media.pause();
+                    plyrPlayer.pause();
                 } else if (currentPlayer === 'videojs' && videojsPlayer) {
                     // 获取当前播放器状态
                     syncData = {
@@ -443,17 +542,50 @@
 
                     // 暂停当前播放器
                     videojsPlayer.pause();
+                } else if (currentPlayer === 'mediaelement' && mediaelementPlayer) {
+                    // 获取当前播放器状态
+                    syncData = {
+                        currentTime: mediaelementPlayer.media.currentTime || 0,
+                        volume: mediaelementPlayer.media.volume || 1,
+                        paused: mediaelementPlayer.media.paused
+                    };
+
+                    // 暂停当前播放器
+                    mediaelementPlayer.media.pause();
                 }
             }
 
-            // 切换显示的播放器包装器
+            // 隐藏所有播放器
+            const plyrWrapper = document.getElementById('player-wrapper-plyr');
             const videojsWrapper = document.getElementById('player-wrapper-videojs');
             const mediaelementWrapper = document.getElementById('player-wrapper-mediaelement');
-            // 隐藏所有播放器
+            if (plyrWrapper) plyrWrapper.style.display = 'none';
             if (videojsWrapper) videojsWrapper.style.display = 'none';
             if (mediaelementWrapper) mediaelementWrapper.style.display = 'none';
 
-            if (targetPlayer === 'videojs') {
+            if (targetPlayer === 'plyr') {
+                // 显示Plyr
+                if (plyrWrapper) {
+                    plyrWrapper.style.display = 'block';
+
+                    // 确保Plyr播放器已初始化
+                    if (!plyrPlayer) {
+                        initPlyrPlayer();
+                    }
+
+                    // 状态同步
+                    if (syncData && plyrPlayer) {
+                        // 等待Plyr准备就绪
+                        plyrPlayer.currentTime = syncData.currentTime;
+                        plyrPlayer.volume = syncData.volume;
+
+                        // 如果原播放器不是暂停的，则开始播放
+                        if (!syncData.paused) {
+                            plyrPlayer.play().catch(error => console.log('Play after switch failed:', error));
+                        }
+                    }
+                }
+            } else if (targetPlayer === 'videojs') {
                 // 显示Video.js
                 if (videojsWrapper) {
                     videojsWrapper.style.display = 'block';
@@ -509,7 +641,14 @@
 
         // 切换播放器
         function togglePlayer() {
-            const newPlayer = currentPlayer === 'mediaelement' ? 'videojs' : 'mediaelement';
+            let newPlayer;
+            if (currentPlayer === 'plyr') {
+                newPlayer = 'videojs';
+            } else if (currentPlayer === 'videojs') {
+                newPlayer = 'mediaelement';
+            } else if (currentPlayer === 'mediaelement') {
+                newPlayer = 'plyr';
+            }
             switchPlayer(newPlayer, true);
 
             // 保存用户首选的播放器
@@ -560,16 +699,16 @@
                         adjustVolume(activePlayer, currentPlayer, -0.1);
                         event.preventDefault();
                         break;
-                    case ' ': // 空格键播放/暂停
+                    case ' ': // Play/Pause
                         togglePlayback(activePlayer, currentPlayer);
                         event.preventDefault();
                         break;
-                    case 'm': // Mute toggle
+                    case 'm': // Mute
                     case 'M':
                         toggleMute(activePlayer, currentPlayer);
                         event.preventDefault();
                         break;
-                    case 'f': // Fullscreen toggle
+                    case 'f': // Fullscreen
                     case 'F':
                         toggleFullscreen(activePlayer, currentPlayer);
                         event.preventDefault();
@@ -582,7 +721,9 @@
 
         // 获取当前活跃的播放器
         function getActivePlayer() {
-            if (currentPlayer === 'videojs' && videojsPlayer) {
+            if (currentPlayer === 'plyr' && plyrPlayer) {
+                return plyrPlayer;
+            } else if (currentPlayer === 'videojs' && videojsPlayer) {
                 return videojsPlayer;
             } else if (currentPlayer === 'mediaelement' && mediaelementPlayer && mediaelementPlayer.media) {
                 return mediaelementPlayer.media;
@@ -592,14 +733,20 @@
 
         // 跳转时间函数
         function skipTime(player, playerType, seconds) {
-            if (playerType === 'videojs') {
-                // Video.js player
+            if (playerType === 'plyr') {
+                // Plyr Player
+                if (player.duration) {
+                    const newTime = Math.max(0, Math.min(player.duration, player.currentTime + seconds));
+                    player.currentTime = newTime;
+                }
+            } else if (playerType === 'videojs') {
+                // Video.js Player
                 if (player.duration()) {
                     const newTime = Math.max(0, Math.min(player.duration(), player.currentTime() + seconds));
                     player.currentTime(newTime);
                 }
             } else if (playerType === 'mediaelement') {
-                // MediaElement player
+                // MediaElement Player
                 if (player.duration) {
                     const newTime = Math.max(0, Math.min(player.duration, player.currentTime + seconds));
                     player.currentTime = newTime;
@@ -609,12 +756,16 @@
 
         // 调整音量函数
         function adjustVolume(player, playerType, delta) {
-            if (playerType === 'videojs') {
-                // Video.js player
+            if (playerType === 'plyr') {
+                // Plyr Player
+                const newVolume = Math.max(0, Math.min(1, player.volume + delta));
+                player.volume = newVolume;
+            } else if (playerType === 'videojs') {
+                // Video.js Player
                 const newVolume = Math.max(0, Math.min(1, player.volume() + delta));
                 player.volume(newVolume);
             } else if (playerType === 'mediaelement') {
-                // MediaElement player
+                // MediaElement Player
                 const newVolume = Math.max(0, Math.min(1, player.volume + delta));
                 player.volume = newVolume;
             }
@@ -622,15 +773,22 @@
 
         // 播放/暂停切换函数
         function togglePlayback(player, playerType) {
-            if (playerType === 'videojs') {
-                // Video.js player
+            if (playerType === 'plyr') {
+                // Plyr Player
+                if (player.paused) {
+                    player.play().catch(error => console.error('Play failed:', error));
+                } else {
+                    player.pause();
+                }
+            } else if (playerType === 'videojs') {
+                // Video.js Player
                 if (player.paused()) {
                     player.play().catch(error => console.error('Play failed:', error));
                 } else {
                     player.pause();
                 }
             } else if (playerType === 'mediaelement') {
-                // MediaElement player
+                // MediaElement Player
                 if (player.paused) {
                     player.play();
                 } else {
@@ -641,18 +799,23 @@
 
         // 静音切换函数
         function toggleMute(player, playerType) {
-            if (playerType === 'videojs') {
-                // Video.js player
+            if (playerType === 'plyr') {
+                // Plyr Player
+                player.muted = !player.muted;
+            } else if (playerType === 'videojs') {
+                // Video.js Player
                 player.muted(!player.muted());
             } else if (playerType === 'mediaelement') {
-                // MediaElement player
+                // MediaElement Player
                 player.muted = !player.muted;
             }
         }
 
         // 全屏切换函数
         function toggleFullscreen(player, playerType) {
-            if (playerType === 'videojs') {
+            if (playerType === 'plyr') {
+                player.fullscreen.toggle();
+            } else if (playerType === 'videojs') {
                 player.requestFullscreen();
             } else if (playerType === 'mediaelement') {
                 if (typeof player.enterFullScreen === 'function') {

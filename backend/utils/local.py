@@ -270,10 +270,10 @@ def get_video_duration(filepath):
         cap.release()
         return 0.0
     # 视频时长
-    duration = frame_count / fps
+    duration = round(frame_count / fps, 3)
     cap.release()
     logger.debug(f"frame_count: {frame_count} / fps: {fps} = duration: {duration}")
-    return round(duration, 3)
+    return duration
 
 def get_video_info(filepath):
     """
@@ -329,6 +329,20 @@ def get_video_info(filepath):
     cap.release()
     return info
 
+def get_video_bitrate(video_path: str) -> int:
+    """
+    获取视频文件的平均比特率（单位：bps）
+    """
+    try:
+        probe = ffmpeg.probe(video_path)
+        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+        if video_stream and 'bit_rate' in video_stream:
+            return int(video_stream['bit_rate'])
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get video bitrate: {str(e)}")
+        return None
+
 def get_crf_value(filepath):
     """
     根据文件扩展名和大小返回相应的CRF值 0无损 23默认 51最差 8 10 12 15
@@ -343,6 +357,7 @@ def get_crf_value(filepath):
         return '15'
     else:
         return '12'  # 默认值
+
 # ------------------------------------------------------
 
 def check_ffmpeg_processes():
